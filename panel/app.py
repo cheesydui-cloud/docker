@@ -218,8 +218,12 @@ def public_config() -> dict:
     return data
 
 
-def run_cmd(args: list[str], timeout: int = 180) -> tuple[int, str]:
+def run_cmd(args: list[str], timeout: int = 180, env: dict | None = None) -> tuple[int, str]:
     try:
+        merged = None
+        if env:
+            merged = os.environ.copy()
+            merged.update(env)
         proc = subprocess.run(
             args,
             cwd=str(ROOT),
@@ -228,6 +232,7 @@ def run_cmd(args: list[str], timeout: int = 180) -> tuple[int, str]:
             text=True,
             timeout=timeout,
             check=False,
+            env=merged,
         )
         return proc.returncode, proc.stdout
     except subprocess.TimeoutExpired as exc:
@@ -315,9 +320,112 @@ def start_job(payload: dict) -> bool:
     return True
 
 
+def start_fn_job(fn, *args) -> bool:
+    with JOB_LOCK:
+        if JOB["running"]:
+            return False
+        JOB["running"] = True
+    threading.Thread(target=fn, args=args, daemon=True).start()
+    return True
+
+
+def _begin_job(title: str) -> None:
+    JOB["ok"] = None
+    JOB["log"] = ""
+    JOB["started"] = int(time.time())
+    JOB["finished"] = 0
+    append_job(title)
+
+
+def _end_job(ok: bool) -> None:
+    JOB["ok"] = ok
+    JOB["running"] = False
+    JOB["finished"] = int(time.time())
+
+
+def upgrade_job() -> None:
+    _begin_job("开始升级")
+    try:
+        code, out = run_cmd(["sh", "scripts/upgrade.sh"], timeout=600)
+        append_job(out)
+        if code != 0:
+            raise RuntimeError("升级失败")
+        append_job("升级完成。请刷新控制台。")
+        _end_job(True)
+    except Exception as exc:  # noqa: BLE001
+        append_job(f"失败：{exc}")
+        _end_job(False)
+
+
+def uninstall_job(keep_data: bool) -> None:
+    _begin_job("开始卸载")
+    try:
+        env = {"KEEP_DATA": "1" if keep_data else "0"}
+        code, out = run_cmd(["sh", "scripts/uninstall.sh"], timeout=180, env=env)
+        append_job(out)
+        if code != 0:
+            raise RuntimeError("卸载失败")
+        append_job("卸载完成。")
+        _end_job(True)
+    except Exception as exc:  # noqa: BLE001
+        append_job(f"失败：{exc}")
+        _end_job(False)
+
+
 def compose_ps() -> str:
     code, out = run_cmd(["docker", "compose", "ps"], timeout=30)
     return out if out.strip() else ("(无法读取容器状态)" if code else "(暂无容器)")
+
+
+def compose_ps_rows() -> list:
+    _, out = run_cmd(["docker", "compose", "ps", "--format", "json"], timeout=30)
+    text = (out or "").strip()
+    items = []
+    if not text:
+        return items
+    if text.startswith("["):
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                items = parsed
+        except json.JSONDecodeError:
+            items = []
+    if not items:
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                items.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    rows = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        ports = item.get("Ports") or item.get("Publishers") or ""
+        if isinstance(ports, list):
+            bits = []
+            for pub in ports:
+                if not isinstance(pub, dict):
+                    continue
+                published = pub.get("PublishedPort") or pub.get("Published") or ""
+                target = pub.get("TargetPort") or pub.get("Target") or ""
+                proto = pub.get("Protocol") or "tcp"
+                if published:
+                    bits.append(f"{published}->{target}/{proto}")
+                elif target:
+                    bits.append(f"{target}/{proto}")
+            ports = ", ".join(bits)
+        rows.append({
+            "name": item.get("Name") or item.get("Names") or "",
+            "service": item.get("Service") or "",
+            "image": item.get("Image") or "",
+            "state": item.get("State") or item.get("Status") or "",
+            "status": item.get("Status") or item.get("State") or "",
+            "ports": str(ports),
+        })
+    return rows
 
 
 def compose_logs(service: str = "caddy") -> str:
@@ -402,7 +510,8 @@ class Handler(BaseHTTPRequestHandler):
         if path.path == "/api/config":
             self._json(200, public_config())
         elif path.path == "/api/status":
-            self._json(200, {"output": compose_ps()})
+            rows = compose_ps_rows()
+            self._json(200, {"output": compose_ps(), "rows": rows})
         elif path.path == "/api/job":
             self._json(200, JOB)
         elif path.path == "/api/dns":
@@ -469,6 +578,18 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/stop":
             _, out = run_cmd(["docker", "compose", "down"], timeout=120)
             self._json(200, {"output": out})
+        elif path == "/api/upgrade":
+            if not start_fn_job(upgrade_job):
+                self._json(409, {"error": "已有任务在跑，请稍候"})
+                return
+            self._json(200, {"ok": True, "message": "已开始升级"})
+        elif path == "/api/uninstall":
+            body = self._read_json()
+            keep = bool(body.get("keep_data"))
+            if not start_fn_job(uninstall_job, keep):
+                self._json(409, {"error": "已有任务在跑，请稍候"})
+                return
+            self._json(200, {"ok": True, "message": "已开始卸载"})
         else:
             self._json(404, {"error": "not found"})
 

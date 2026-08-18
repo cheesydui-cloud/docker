@@ -154,6 +154,21 @@ if grep -q 'panel/.secret' panel/index.html || grep -q '群晖只填加速站主
 else
   ok "圈出的说明文案已去掉"
 fi
+if grep -q 'status-rows' panel/index.html && grep -q 'compose_ps_rows' panel/app.py; then
+  ok "容器状态用表格"
+else
+  fail "容器状态还不是表格"
+fi
+if grep -q 'onsubmit="login()' panel/index.html && grep -q 'toast(' panel/index.html && grep -q 'showResult(text, kind, stay)' panel/index.html; then
+  ok "登录可回车，操作不强制跳页"
+else
+  fail "缺少回车登录或不跳页"
+fi
+if grep -q '/api/upgrade' panel/app.py && grep -q '/api/uninstall' panel/app.py && grep -q 'runUpgrade' panel/index.html && grep -q 'runUninstall' panel/index.html; then
+  ok "系统设置可升级卸载"
+else
+  fail "系统设置缺少升级卸载"
+fi
 if grep -q 'systemctl restart docker-mirror-panel' scripts/start-panel.sh && grep -q '重启控制台' scripts/upgrade.sh; then
   ok "升级会强制重启控制台进程"
 else

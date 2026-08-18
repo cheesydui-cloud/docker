@@ -162,6 +162,38 @@
     .bad { color: var(--bad); }
     .warn { color: var(--warn); }
     .flash { margin: 12px 0 0; }
+    .toast {
+      position: fixed;
+      right: 24px;
+      top: 20px;
+      z-index: 20;
+      min-width: 220px;
+      max-width: 420px;
+      background: #2c241c;
+      color: #fff;
+      border-radius: 12px;
+      padding: 12px 14px;
+      box-shadow: var(--shadow);
+      display: none;
+    }
+    .toast.show { display: block; }
+    .toast.bad { background: #8b2a22; }
+    .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    th { color: var(--muted); font-weight: 500; background: #faf6f1; }
+    tr:last-child td { border-bottom: 0; }
+    .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+      background: #bbb;
+    }
+    .dot.up { background: var(--ok); }
+    .dot.down { background: var(--bad); }
+    .split { height: 1px; background: var(--line); margin: 22px 0; }
 
     .login-wrap {
       min-height: 100%;
@@ -201,6 +233,7 @@
 <div id="login-screen" class="login-wrap">
   <section class="login-card">
     <h1>控制台登录</h1>
+    <form onsubmit="login(); return false;">
     <div class="field">
       <label for="login-user">账号</label>
       <input id="login-user" value="admin" autocomplete="username">
@@ -209,8 +242,9 @@
       <label for="token">密码</label>
       <input id="token" type="password" autocomplete="current-password">
     </div>
-    <div class="btns"><button class="btn primary" type="button" onclick="login()">登录</button></div>
+    <div class="btns"><button class="btn primary" type="submit">登录</button></div>
     <p id="login-msg" class="bad flash"></p>
+    </form>
   </section>
 </div>
 
@@ -263,6 +297,7 @@
         <button class="btn" type="button" onclick="logout()">退出</button>
       </div>
     </div>
+    <div id="toast" class="toast"></div>
 
     <section class="page active" id="page-overview">
       <div class="stats">
@@ -371,6 +406,14 @@
           <button class="btn primary" type="button" onclick="changeAccount()">保存账号密码</button>
         </div>
       </section>
+      <section class="card">
+        <h2>维护</h2>
+        <div class="btns">
+          <button class="btn" type="button" onclick="runUpgrade()">升级</button>
+          <button class="btn" type="button" onclick="runUninstall(true)">停服务留数据</button>
+          <button class="btn danger" type="button" onclick="runUninstall(false)">卸载</button>
+        </div>
+      </section>
     </section>
 
     <section class="page" id="page-result">
@@ -383,7 +426,16 @@
     <section class="page" id="page-status">
       <section class="card">
         <h2>容器状态</h2>
-        <pre id="status">(尚未加载)</pre>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>服务</th><th>状态</th><th>镜像</th><th>端口</th></tr>
+            </thead>
+            <tbody id="status-rows">
+              <tr><td colspan="4">尚未加载</td></tr>
+            </tbody>
+          </table>
+        </div>
       </section>
     </section>
 
@@ -420,16 +472,27 @@ function showPage(name) {
   $("page-title").textContent = TITLES[name] || "控制台";
 }
 
-function showResult(text, kind) {
+function toast(text, kind) {
+  const el = $("toast");
+  if (!el) return;
+  el.textContent = text || "";
+  el.className = "toast show" + (kind === "bad" ? " bad" : "");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { el.className = "toast"; }, 3200);
+}
+
+function showResult(text, kind, stay) {
   const el = $("job");
   if (el) el.textContent = text || "(空)";
   const flash = $("flash");
+  const first = (text || "").split("\n").filter(Boolean)[0] || "已更新结果";
+  const bad = kind === "bad" || /失败|错误|ERROR|FAIL|not found/.test(first);
   if (flash) {
-    const first = (text || "").split("\n").filter(Boolean)[0] || "已更新结果";
     flash.textContent = first;
-    flash.className = "flash " + (kind || (/失败|错误|ERROR|FAIL|not found/.test(first) ? "bad" : "ok"));
+    flash.className = "flash " + (bad ? "bad" : "ok");
   }
-  showPage("result");
+  toast(first, bad ? "bad" : "ok");
+  if (!stay) showPage("result");
 }
 
 async function api(path, opt={}) {
@@ -524,12 +587,29 @@ function parseKv(text) {
   return out;
 }
 
+function renderStatus(rows, fallback) {
+  const box = $("status-rows");
+  if (!box) return;
+  if (!rows || !rows.length) {
+    box.innerHTML = "<tr><td colspan=\"4\">" + (fallback || "暂无容器") + "</td></tr>";
+    return;
+  }
+  box.innerHTML = rows.map((row) => {
+    const state = String(row.state || row.status || "").toLowerCase();
+    const up = state.includes("running") || state === "up";
+    return "<tr><td>" + (row.service || row.name || "-") +
+      "</td><td><span class=\"dot " + (up ? "up" : "down") + "\"></span>" + (row.status || row.state || "-") +
+      "</td><td>" + (row.image || "-") +
+      "</td><td>" + (row.ports || "-") + "</td></tr>";
+  }).join("");
+}
+
 async function refreshOverview() {
   try {
     const st = await api("/api/status");
-    $("status").textContent = st.output || st.error || "(空)";
+    renderStatus(st.rows, st.output || st.error || "暂无容器");
   } catch (e) {
-    $("status").textContent = "读取容器失败：" + e.message;
+    renderStatus([], "读取容器失败：" + e.message);
   }
   try {
     const r = await api("/api/cert");
@@ -581,17 +661,17 @@ async function refreshOverview() {
 
 function copyMirror() {
   const site = $("SITE_ADDRESS").value.trim();
-  if (!site) { showResult("先填加速站主机名", "bad"); return; }
+  if (!site) { showResult("先填加速站主机名", "bad", true); return; }
   const url = "https://" + site;
-  navigator.clipboard.writeText(url).then(() => showResult("已复制 " + url, "ok"))
-    .catch(() => showResult(url, "ok"));
+  navigator.clipboard.writeText(url).then(() => showResult("已复制 " + url, "ok", true))
+    .catch(() => showResult(url, "ok", true));
 }
 
 async function saveOnly() {
   try {
     const r = await api("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(formPayload())});
-    showResult(r.ok ? "已保存，还没有部署。" : (r.error || "保存失败"), r.ok ? "ok" : "bad");
-  } catch (e) { showResult("保存失败：" + e.message, "bad"); }
+    showResult(r.ok ? "已保存，还没有部署。" : (r.error || "保存失败"), r.ok ? "ok" : "bad", true);
+  } catch (e) { showResult("保存失败：" + e.message, "bad", true); }
 }
 
 async function changeAccount() {
@@ -617,58 +697,59 @@ async function changeAccount() {
     $("current-password").value = "";
     $("new-password").value = "";
     $("new-password2").value = "";
-    showResult("账号密码已更新，当前会话继续有效。", "ok");
+    showResult("账号密码已更新。", "ok", true);
   } catch (e) {
-    showResult("改账号失败：" + e.message, "bad");
+    showResult("改账号失败：" + e.message, "bad", true);
   }
 }
 
 async function deploy() {
   const btn = $("btn-deploy");
   if (btn) btn.disabled = true;
-  showResult("正在提交部署任务…", "ok");
+  showResult("正在提交部署任务…", "ok", true);
   try {
     const r = await api("/api/deploy", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(formPayload())});
-    if (r.error) { showResult("部署没有开始：" + r.error, "bad"); return; }
-    showResult("任务已提交。下面会持续刷新日志。", "ok");
+    if (r.error) { showResult("部署没有开始：" + r.error, "bad", true); return; }
+    showResult("任务已提交。", "ok", true);
     pollJob();
-  } catch (e) { showResult("部署失败：" + e.message, "bad"); }
+  } catch (e) { showResult("部署失败：" + e.message, "bad", true); }
   finally { if (btn) btn.disabled = false; }
 }
 
 async function pollJob() {
   try {
     const r = await api("/api/job");
-    if (r.log) {
-      $("job").textContent = r.log;
-      if (!r.running) showPage("result");
-    }
+    if (r.log) $("job").textContent = r.log;
     if (r.running) setTimeout(pollJob, 1500);
-    else refreshOverview();
-  } catch (e) { showResult("读取任务日志失败：" + e.message, "bad"); }
+    else {
+      const first = ((r.log || "").split("\n").filter(Boolean).slice(-1)[0]) || "任务结束";
+      toast(first, r.ok === false ? "bad" : "ok");
+      refreshOverview();
+    }
+  } catch (e) { showResult("读取任务日志失败：" + e.message, "bad", true); }
 }
 
 async function checkDns() {
   try {
     await saveOnly();
-    showResult("正在检查 DNS…", "ok");
+    showResult("正在检查 DNS…", "ok", true);
     const r = await api("/api/dns");
-    showResult(r.output || r.error || "DNS 检查无输出", r.ok ? "ok" : "bad");
-  } catch (e) { showResult("DNS 检查失败：" + e.message, "bad"); }
+    showResult(r.output || r.error || "DNS 检查无输出", r.ok ? "ok" : "bad", true);
+  } catch (e) { showResult("DNS 检查失败：" + e.message, "bad", true); }
 }
 async function health() {
   try {
-    showResult("正在做健康检查…", "ok");
+    showResult("正在做健康检查…", "ok", true);
     const r = await api("/api/health");
-    showResult(r.output || r.error || "健康检查无输出", r.ok ? "ok" : "bad");
+    showResult(r.output || r.error || "健康检查无输出", r.ok ? "ok" : "bad", true);
     refreshOverview();
-  } catch (e) { showResult("健康检查失败：" + e.message, "bad"); }
+  } catch (e) { showResult("健康检查失败：" + e.message, "bad", true); }
 }
 async function clientCfg() {
   try {
     const r = await api("/api/client");
-    showResult(r.output || r.error || "无输出", "ok");
-  } catch (e) { showResult("读取客户端配置失败：" + e.message, "bad"); }
+    showResult(r.output || r.error || "无输出", "ok", true);
+  } catch (e) { showResult("读取客户端配置失败：" + e.message, "bad", true); }
 }
 async function logs(svc) {
   try {
@@ -681,9 +762,32 @@ async function restart() {
   if (!confirm("确定重启加速站容器？")) return;
   try {
     const r = await api("/api/restart", {method:"POST"});
-    showResult(r.output || r.error || "已发送重启", "ok");
+    showResult(r.output || r.error || "已发送重启", "ok", true);
     refreshOverview();
-  } catch (e) { showResult("重启失败：" + e.message, "bad"); }
+  } catch (e) { showResult("重启失败：" + e.message, "bad", true); }
+}
+
+async function runUpgrade() {
+  if (!confirm("确定升级到最新版本？控制台可能会短暂重启。")) return;
+  try {
+    const r = await api("/api/upgrade", {method:"POST", headers:{"Content-Type":"application/json"}, body: "{}"});
+    showResult(r.message || "已开始升级", "ok", true);
+    pollJob();
+  } catch (e) { showResult("升级失败：" + e.message, "bad", true); }
+}
+
+async function runUninstall(keep) {
+  const msg = keep ? "只停服务、保留缓存和配置？" : "确定卸载？会删除安装目录，不卸 Docker。";
+  if (!confirm(msg)) return;
+  try {
+    const r = await api("/api/uninstall", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({keep_data: !!keep})
+    });
+    showResult(r.message || "已开始卸载", "ok", true);
+    pollJob();
+  } catch (e) { showResult("卸载失败：" + e.message, "bad", true); }
 }
 
 if (USERNAME) $("login-user").value = USERNAME;

@@ -1,0 +1,9 @@
+# 由 scripts/render-edge.sh 生成。直连模式（80/443 空闲）才会启动 edge 容器。
+{
+	auto_https off
+	admin off
+}
+
+:80 {
+	reverse_proxy caddy:80
+}

@@ -26,6 +26,8 @@ for f in \
   scripts/start-panel.sh \
   scripts/adapt-host.sh \
   scripts/upgrade.sh \
+  scripts/render-edge.sh \
+  scripts/nginx-disarm-servername.py \
   panel/app.py \
   panel/docker-mirror-panel.service \
   www/install.sh \
@@ -58,33 +60,27 @@ cat > .env <<'EOF'
 SITE_ADDRESS=mirror.example.test
 DOMAIN=example.test
 ACME_EMAIL=admin@example.test
-HTTP_ONLY=false
-EOF
-sh scripts/render-caddyfile.sh >/dev/null
-sh scripts/render-site.sh >/dev/null
-
-if grep -q 'mirror.example.test' caddy/Caddyfile; then ok "Caddyfile 主站"; else fail "Caddyfile 未包含主站"; fi
-if grep -q 'registry-dockerhub:5000' caddy/Caddyfile; then ok "Caddyfile 反代 dockerhub"; else fail "Caddyfile 未反代 dockerhub"; fi
-if grep -q 'ghcr.example.test' caddy/Caddyfile; then fail "默认不应生成未解析的 ghcr 站点"; else ok "默认不生成多余子域名"; fi
-ENABLE_ALL_SUBDOMAINS=true sh scripts/render-caddyfile.sh >/dev/null
-if grep -q 'ghcr.example.test' caddy/Caddyfile && grep -q 'k8s.example.test' caddy/Caddyfile; then
-  ok "开启 ENABLE_ALL_SUBDOMAINS 后生成子域名"
-else
-  fail "ENABLE_ALL_SUBDOMAINS 未生成子域名"
-fi
-SITE_ADDRESS=mirror.example.test DOMAIN=example.test HTTP_ONLY=false ENABLE_ALL_SUBDOMAINS=false sh scripts/render-caddyfile.sh >/dev/null
-if grep -q 'https://mirror.example.test' www/index.html; then ok "首页加速地址"; else fail "首页未写入加速地址"; fi
-if grep -q 'ghcr.example.test' www/index.html; then ok "首页 ghcr 前缀"; else fail "首页未写入 ghcr 前缀"; fi
-
-cat > .env <<'EOF'
-SITE_ADDRESS=:80
-DOMAIN=
 HTTP_ONLY=true
 EOF
 sh scripts/render-caddyfile.sh >/dev/null
-grep -q 'auto_https off' caddy/Caddyfile || fail "HTTP 模式未关闭自动 HTTPS"
-grep -q ':5001' caddy/Caddyfile || fail "HTTP 模式缺少 5001"
-ok "HTTP 模式渲染成功"
+sh scripts/render-edge.sh >/dev/null
+sh scripts/render-site.sh >/dev/null
+
+if grep -q 'auto_https off' caddy/Caddyfile; then ok "内部路由关闭 auto_https"; else fail "内部路由未关闭 auto_https"; fi
+if grep -q 'mirror.example.test' caddy/Caddyfile; then fail "内部路由不应出现站点域名（会 308）"; else ok "内部路由不含站点域名"; fi
+if grep -q 'registry-dockerhub:5000' caddy/Caddyfile; then ok "内部路由反代 dockerhub"; else fail "内部路由未反代 dockerhub"; fi
+if grep -q ':5001' caddy/Caddyfile; then ok "内部路由含 5001"; else fail "内部路由缺少 5001"; fi
+if grep -q 'mirror.example.test' caddy/Caddyfile.edge; then ok "边缘 Caddy 含主站"; else fail "边缘 Caddy 未含主站"; fi
+if grep -q 'reverse_proxy caddy:80' caddy/Caddyfile.edge; then ok "边缘反代内部 HTTP"; else fail "边缘未反代内部 HTTP"; fi
+if grep -q 'ghcr.example.test' caddy/Caddyfile.edge; then fail "默认不应生成未解析的 ghcr 站点"; else ok "默认不生成多余子域名"; fi
+ENABLE_ALL_SUBDOMAINS=true sh scripts/render-edge.sh >/dev/null
+if grep -q 'ghcr.example.test' caddy/Caddyfile.edge && grep -q 'k8s.example.test' caddy/Caddyfile.edge; then
+  ok "开启 ENABLE_ALL_SUBDOMAINS 后边缘生成子域名"
+else
+  fail "ENABLE_ALL_SUBDOMAINS 未生成子域名"
+fi
+if grep -q 'https://mirror.example.test' www/index.html; then ok "首页加速地址"; else fail "首页未写入加速地址"; fi
+if grep -q 'ghcr.example.test' www/index.html; then ok "首页 ghcr 前缀"; else fail "首页未写入 ghcr 前缀"; fi
 
 echo
 echo "== docker-compose 结构 =="
@@ -102,13 +98,16 @@ need = [
     "registry-nvcr",
     "registry-mcr",
     "caddy",
+    "edge",
     "REGISTRY_PROXY_REMOTEURL",
 ]
 missing = [n for n in need if n not in text]
 if "5001:5001" in text:
     missing.append("HTTPS 模式不应默认暴露 5001-5006")
 if "HTTP_PORT:-5080" not in text:
-    missing.append("Caddy 默认应映射 5080，避免抢 80")
+    missing.append("内部 Caddy 默认应映射 5080，避免抢 80")
+if 'profiles: ["direct"]' not in text:
+    missing.append("edge 必须挂在 direct profile")
 if missing:
     print("MISSING:" + ",".join(missing))
     sys.exit(1)
@@ -122,6 +121,8 @@ fi
 
 python3 -m py_compile panel/app.py
 ok "panel/app.py 语法"
+python3 -m py_compile scripts/nginx-disarm-servername.py
+ok "nginx-disarm-servername.py 语法"
 
 if sh scripts/adapt-host.sh detect | grep -q '^MODE='; then
   ok "adapt-host detect 输出 MODE"
@@ -180,10 +181,39 @@ if sh scripts/adapt-host.sh gen-nginx-ssl docker.example.test \
     fail "生成的 ssl_certificate 参数个数不对"
     grep ssl_certificate "$SSL_OUT" || true
   fi
+  if grep -E 'return 301|return 308' "$SSL_OUT"; then
+    fail "Nginx 站点不应 301/308 到自身"
+  else
+    ok "Nginx 站点不做二次跳转"
+  fi
 else
   fail "gen-nginx-ssl 失败"
 fi
 rm -f "$SSL_OUT"
+
+DISARM_IN="$(mktemp)"
+DISARM_NGINX="$(mktemp)"
+cat > "$DISARM_IN" <<'EOF'
+server {
+    listen 443 ssl;
+    server_name docker.example.test d-ui.example.test;
+}
+EOF
+cat > "$DISARM_NGINX" <<EOF
+# configuration file $DISARM_IN:
+$(cat "$DISARM_IN")
+EOF
+if python3 scripts/nginx-disarm-servername.py docker.example.test /tmp/docker-mirror.conf "$DISARM_NGINX" >/dev/null; then
+  if grep -q 'docker.example.test.disabled-by-docker-mirror' "$DISARM_IN" && grep -q 'd-ui.example.test' "$DISARM_IN"; then
+    ok "冲突 server_name 会被改名，其它主机名保留"
+  else
+    fail "冲突 server_name 改写结果不对"
+    cat "$DISARM_IN"
+  fi
+else
+  fail "nginx-disarm-servername.py 失败"
+fi
+rm -f "$DISARM_IN" "$DISARM_NGINX" "${DISARM_IN}.bak.disabled-by-docker-mirror"
 
 if sh scripts/adapt-host.sh gen-nginx-ssl docker.example.test \
     $'已有证书 /etc/letsencrypt/live/x ，复用\n/etc/letsencrypt/live/x/fullchain.pem' \

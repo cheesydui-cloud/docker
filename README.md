@@ -57,20 +57,23 @@ curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install
 
 安全组额外放行 **TCP 8088**（建议只给你自己的 IP）。域名、证书、重启、日志都在这个页面完成。
 
-### 和 3x-ui / 已有网站同机
+### 任意机器怎么选边缘（不用你判断）
 
-点「保存并部署」会自动探测 80/443：
+缓存永远只听本机 `127.0.0.1:5080`，**内部不再签证书、不做 301**。  
+80/443 由脚本探测后再选一种边缘：
 
-| 探测结果 | 自动做什么 |
+| 这台机器的 80/443 | 自动做什么 |
 | --- | --- |
-| 80/443 空闲 | 镜像站自己占端口，Caddy 签证书 |
-| Nginx 占用 | 只听 `127.0.0.1:5080`，写 `/etc/nginx/conf.d/docker-mirror.conf`，用 certbot 签证书并 reload |
-| 宿主机 Caddy 占用 | 把站点写入现有 Caddyfile 并 reload，证书仍由那套 Caddy 签 |
-| 其他未知进程 | 后端照常启动，任务日志里打印要粘贴的片段，并标明是谁占了 80 |
+| 都空闲 | 启动 `edge` 容器占 80/443，Caddy 签证书，反代到 5080 |
+| Nginx / 3x-ui 自带 Nginx | 写 `/etc/nginx/conf.d/docker-mirror.conf`；把其它站点里同名 `server_name` 改掉（渡口/默认站不再抢走域名）；certbot 签证书 |
+| 宿主机 Caddy | 把站点写入现有 Caddyfile，证书仍由那套 Caddy 签 |
+| 其它进程 / 别人的容器 | 后端照常起来，日志打印要粘贴的片段，标明是谁占了 80，不乱改 |
 
-一般不用再手改 Nginx。群晖仍填 `https://docker.你的域名`。
+空闲机器和占用机器用同一套安装命令。换一台机器再跑一遍即可，不用改参数。
 
-打开 `https://docker.你的域名` 如果看到的是 **另一个面板**（3x-ui / 渡口等），说明 443 还落在默认站点。升级后再点一次「保存并部署」，或直接跑下面的升级命令。
+群晖 / 国内 Docker 仍填 `https://docker.你的域名`。
+
+打开域名如果是 **另一个面板** 或浏览器报 `ERR_TOO_MANY_REDIRECTS`：跑升级命令。新版本 HTTP 不再 301 回自己，也不会让内部 Caddy 再跳 HTTPS。
 
 ### 已安装机器升级（保留缓存和面板密码）
 
@@ -169,7 +172,8 @@ curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/scripts
 | 现象 | 处理 |
 | --- | --- |
 | 一键脚本卡在 DNS | 解析还没指到这台机器，或 TTL 未生效 |
-| 浏览器打开域名是别的项目 / 登录页 | 443 被原 Nginx 默认站抢走。跑升级脚本，确认 `/etc/nginx/conf.d/docker-mirror.conf` 里 `ssl_certificate` 只有一行路径 |
+| 浏览器打开域名是别的项目 / 登录页 | 443 被原 Nginx 默认站抢走。升级后会改掉冲突 `server_name` |
+| `ERR_TOO_MANY_REDIRECTS` / HTTP 308 | 边缘又 301 到 HTTPS，或 Cloudflare 开了橙云。新版本 HTTP 直接反代，不再跳转 |
 | `toomanyrequests` | 加 `--hub-user` / `--hub-token` 后重跑或改 `.env` 再 `docker compose up -d` |
 | 群晖填了还是很慢 / 失败 | 确认填的是 `https://mirror.域名`，并已重启套件 |
 | `ghcr.io` / `k8s` 还是拉不到 | 正常，要改镜像前缀，不是只填加速地址 |

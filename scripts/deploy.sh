@@ -53,6 +53,7 @@ set -a
 set +a
 sh scripts/render-site.sh
 sh scripts/render-caddyfile.sh
+sh scripts/render-edge.sh
 
 echo "正在启动镜像加速站..."
 docker compose up -d

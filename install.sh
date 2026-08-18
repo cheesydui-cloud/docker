@@ -188,11 +188,13 @@ DOCKERHUB_PASSWORD=${HUB_TOKEN}
 HTTP_PROXY=
 HTTPS_PROXY=
 NO_PROXY=localhost,127.0.0.1,caddy,registry-dockerhub,registry-ghcr,registry-gcr,registry-quay,registry-k8s,registry-nvcr,registry-mcr
-HTTP_BIND=127.0.0.1
-HTTP_PORT=5080
-HTTPS_BIND=127.0.0.1
-HTTPS_PORT=5443
-EOF
+	HTTP_BIND=127.0.0.1
+	HTTP_PORT=5080
+	HTTPS_BIND=127.0.0.1
+	HTTPS_PORT=5443
+	COMPOSE_PROFILES=
+	EDGE_MODE=
+	EOF
 
 if [ "$SKIP_DNS" != "true" ]; then
   log "检查 DNS 是否指向本机"
@@ -202,9 +204,10 @@ fi
 log "探测 80/443 并自动选择直连或挂到现有反代"
 sh scripts/adapt-host.sh configure
 
-log "生成站点与 Caddy 配置"
-sh scripts/render-site.sh
-sh scripts/render-caddyfile.sh
+	log "生成站点 / 内部路由 / 边缘证书配置"
+	sh scripts/render-site.sh
+	sh scripts/render-caddyfile.sh
+	sh scripts/render-edge.sh
 
 log "启动服务"
 docker compose pull

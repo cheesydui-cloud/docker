@@ -6,11 +6,12 @@ x-registry: &registry
   environment: &registry-env
     HTTP_PROXY: ${HTTP_PROXY:-}
     HTTPS_PROXY: ${HTTPS_PROXY:-}
-    NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,caddy}
+    NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,caddy,edge}
   volumes:
     - ./registry/config.yml:/etc/docker/registry/config.yml:ro
 
 services:
+  # 内部路由器：永远只听 HTTP。对外证书由 edge 或宿主机 Nginx/Caddy 处理。
   caddy:
     image: caddy:2.8-alpine
     restart: unless-stopped
@@ -24,17 +25,30 @@ services:
       - registry-mcr
     ports:
       - "${HTTP_BIND:-127.0.0.1}:${HTTP_PORT:-5080}:80"
-      - "${HTTPS_BIND:-127.0.0.1}:${HTTPS_PORT:-5443}:443"
-      - "${HTTPS_BIND:-127.0.0.1}:${HTTPS_PORT:-5443}:443/udp"
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-:80}
       DOMAIN: ${DOMAIN:-}
-      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./www:/usr/share/caddy:ro
-      - caddy_data:/data
-      - caddy_config:/config
+
+  # 仅当 80/443 空闲时启动（.env 里 COMPOSE_PROFILES=direct）
+  edge:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    profiles: ["direct"]
+    depends_on:
+      - caddy
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+      - "0.0.0.0:443:443/udp"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
+    volumes:
+      - ./caddy/Caddyfile.edge:/etc/caddy/Caddyfile:ro
+      - edge_data:/data
+      - edge_config:/config
 
   registry-dockerhub:
     <<: *registry
@@ -102,5 +116,5 @@ services:
       - ./data/mcr:/var/lib/registry
 
 volumes:
-  caddy_data:
-  caddy_config:
+  edge_data:
+  edge_config:

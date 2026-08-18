@@ -52,6 +52,7 @@ log "按当前 80/443 占用重新适配"
 sh scripts/adapt-host.sh configure
 sh scripts/render-site.sh
 sh scripts/render-caddyfile.sh
+sh scripts/render-edge.sh
 
 log "更新容器"
 docker compose pull

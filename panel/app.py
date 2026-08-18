@@ -35,6 +35,8 @@ ENV_KEYS = [
     "HTTPS_PORT",
     "HTTP_BIND",
     "HTTPS_BIND",
+    "COMPOSE_PROFILES",
+    "EDGE_MODE",
 ]
 
 
@@ -71,6 +73,8 @@ def load_env() -> dict:
         "HTTPS_PORT": "5443",
         "HTTP_BIND": "127.0.0.1",
         "HTTPS_BIND": "127.0.0.1",
+        "COMPOSE_PROFILES": "",
+        "EDGE_MODE": "",
     }
     if not ENV_FILE.exists():
         return data
@@ -119,6 +123,8 @@ def write_env(values: dict) -> None:
         f"HTTPS_PORT={current.get('HTTPS_PORT', '5443')}",
         f"HTTP_BIND={current.get('HTTP_BIND', '127.0.0.1')}",
         f"HTTPS_BIND={current.get('HTTPS_BIND', '127.0.0.1')}",
+        f"COMPOSE_PROFILES={current.get('COMPOSE_PROFILES', '')}",
+        f"EDGE_MODE={current.get('EDGE_MODE', '')}",
         "",
     ]
     ENV_FILE.write_text("\n".join(lines), encoding="utf-8")
@@ -181,8 +187,8 @@ def deploy_job(payload: dict) -> None:
         append_job(out)
         if code != 0:
             raise RuntimeError("主机探测失败")
-        append_job("== 生成站点与内部 Caddy 配置 ==")
-        for script in ("scripts/render-site.sh", "scripts/render-caddyfile.sh"):
+        append_job("== 生成站点 / 内部路由 / 边缘证书配置 ==")
+        for script in ("scripts/render-site.sh", "scripts/render-caddyfile.sh", "scripts/render-edge.sh"):
             code, out = run_cmd(["sh", script], timeout=30)
             append_job(out)
             if code != 0:
@@ -235,6 +241,7 @@ def compose_ps() -> str:
 def compose_logs(service: str = "caddy") -> str:
     service = service if service in {
         "caddy",
+        "edge",
         "registry-dockerhub",
         "registry-ghcr",
         "registry-gcr",
@@ -281,7 +288,7 @@ PAGE = r"""<!DOCTYPE html>
 <main>
   <div class="pill">网页部署 · 不用记命令</div>
   <h1>镜像加速站控制台</h1>
-  <p class="sub">在这里填写域名、邮箱和 Docker Hub 账号，点「保存并部署」。美国服务器会自动签证书并启动缓存。</p>
+  <p class="sub">填写域名后点「保存并部署」。脚本会探测 80/443：空闲就自己签证书，已被 Nginx/Caddy 占用就挂到现有反代后面。缓存永远只听本机 5080，不会和别的站点抢端口。</p>
 
   <section class="card" id="login-card">
     <h2>登录</h2>

@@ -1,17 +1,15 @@
 #!/usr/bin/env sh
-# 自动适配宿主机 80/443：
-#   空闲        → 镜像站自己占 80/443，Caddy 签证书
-#   Nginx 占用  → 只听 127.0.0.1:5080，写 Nginx 站点，certbot 签证书
-#   宿主机 Caddy → 只听 127.0.0.1:5080，写入现有 Caddyfile 并 reload
-#   其他占用    → 仍听 5080，尽量识别进程，给出明确失败原因
+# 按宿主机真实占用选择边缘，内部缓存永远只听 HTTP。
 #
-# 日志一律 stderr。stdout 只给 detect 的 KEY='value'，避免证书路径被污染。
+#   80/443 空闲          → MODE=direct        启动 edge 容器签证书
+#   Nginx / 3x-ui Nginx  → MODE=behind-nginx  写独立站点，让出冲突 server_name
+#   宿主机 Caddy         → MODE=behind-caddy  写入现有 Caddyfile
+#   其它占用             → MODE=behind-unknown 后端就绪，打印片段后失败
+#
+# 内部 Caddy 禁止 HTTPS / 禁止 301，避免「Nginx HTTPS → Caddy 308 → Nginx」死循环。
 #
 # 用法：
-#   sh scripts/adapt-host.sh detect
-#   sh scripts/adapt-host.sh configure
-#   sh scripts/adapt-host.sh integrate
-#   sh scripts/adapt-host.sh all
+#   sh scripts/adapt-host.sh detect|configure|integrate|all
 #   sh scripts/adapt-host.sh gen-nginx-ssl <site> <fullchain> <privkey>
 set -eu
 
@@ -26,10 +24,10 @@ MARKER_BEGIN="# BEGIN docker-mirror"
 MARKER_END="# END docker-mirror"
 ACME_WEBROOT="${ACME_WEBROOT:-/var/www/docker-mirror-acme}"
 BACKEND_PORT="${BACKEND_PORT:-5080}"
+BACKEND="127.0.0.1:${BACKEND_PORT}"
 
 mkdir -p "$STATE_DIR"
 
-# 永远写 stderr，调用方用命令替换捕获时不会吃到日志
 log() { printf '%s\n' "$*" >&2; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
@@ -40,13 +38,6 @@ load_dotenv() {
     . "$ROOT/.env"
     set +a
   fi
-}
-
-is_true() {
-  case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
-    1|true|yes|on) return 0 ;;
-    *) return 1 ;;
-  esac
 }
 
 shell_quote() {
@@ -75,7 +66,6 @@ set_env() {
   write_kv "$ROOT/.env" "$1" "$2"
 }
 
-# 证书 / 私钥路径必须是单个 Unix 路径，不能含空白或换行
 assert_pem_path() {
   label="$1"
   path="$2"
@@ -84,7 +74,7 @@ assert_pem_path() {
   fi
   case "$path" in
     *$'\n'*|*$'\r'*|*' '*|*$'\t'*)
-      fail "${label} 含空白/换行，拒绝写入 Nginx：$(printf '%s' "$path" | tr '\n\r\t' '___')"
+      fail "${label} 含空白/换行，拒绝写入 Nginx"
       ;;
   esac
   case "$path" in
@@ -104,27 +94,6 @@ assert_pem_file() {
   assert_pem_path "$label" "$path"
   [ -f "$path" ] || fail "${label} 不存在：$path"
   [ -s "$path" ] || fail "${label} 是空文件：$path"
-}
-
-sanitize_live_dir() {
-  raw="$(printf '%s' "${1:-}" | tr -d '\r')"
-  # 只取最后一行里看起来像 live 目录的路径
-  live="$(printf '%s\n' "$raw" | awk '
-    {
-      for (i = 1; i <= NF; i++) {
-        if ($i ~ /^\/etc\/letsencrypt\/live\/[A-Za-z0-9._-]+\/?$/) {
-          gsub(/\/$/, "", $i)
-          print $i
-        }
-      }
-    }
-  ' | tail -n1)"
-  if [ -z "$live" ]; then
-    live="$(printf '%s\n' "$raw" | awk '/^\/etc\/letsencrypt\/live\/[A-Za-z0-9._-]+$/ {print; found=1} END{if(!found) exit 1}' | tail -n1)" || live=""
-  fi
-  [ -n "$live" ] || fail "无法从输出中解析证书目录"
-  assert_pem_path "证书目录" "$live"
-  printf '%s' "$live"
 }
 
 owner_of_port() {
@@ -164,8 +133,8 @@ classify_owner() {
   proc="$1"
   dname="$2"
   case "$dname" in
-    *docker-mirror-caddy*|*caddy*)
-      printf 'self-caddy'
+    *docker-mirror-edge*|*docker-mirror-caddy*)
+      printf 'self'
       return 0
       ;;
   esac
@@ -174,13 +143,13 @@ classify_owner() {
     nginx|nginx:*) printf 'nginx' ;;
     caddy) printf 'caddy' ;;
     docker-proxy|dockerd)
-      if printf '%s' "$dname" | grep -q 'caddy'; then
-        printf 'other-caddy-container'
-      else
-        printf 'other-docker'
-      fi
+      case "$dname" in
+        *edge*|*docker-mirror*) printf 'self' ;;
+        *caddy*) printf 'other-caddy-container' ;;
+        *) printf 'other-docker' ;;
+      esac
       ;;
-    xray|v2ray|sing-box|x-ui|x-ui-*) printf 'panel-stack' ;;
+    xray|v2ray|sing-box|x-ui|x-ui-*|xray-linux*) printf 'panel-stack' ;;
     *) printf 'other' ;;
   esac
 }
@@ -237,53 +206,64 @@ detect() {
   https_class="$(classify_owner "$https_proc" "$https_docker")"
 
   mode="direct"
-  reason="80/443 空闲，由镜像站 Caddy 对外并自动签证书"
+  reason="80/443 空闲，由镜像站 edge 容器对外签证书"
 
   if [ -n "${ADAPT_FORCE_MODE:-}" ]; then
     mode="$ADAPT_FORCE_MODE"
     reason="手动指定 ADAPT_FORCE_MODE=$ADAPT_FORCE_MODE"
   else
-    case "$http_class" in
-      free|self-caddy)
-        if [ "$https_class" = "free" ] || [ "$https_class" = "self-caddy" ]; then
-          mode="direct"
-          reason="80/443 空闲或已是本站 Caddy"
-        elif [ "$https_class" = "nginx" ]; then
+    # 自己的 edge 占着 80/443 仍算直连
+    if [ "$http_class" = "self" ] || [ "$https_class" = "self" ]; then
+      mode="direct"
+      reason="80/443 已是本站 edge"
+    else
+      case "$http_class" in
+        free)
+          if [ "$https_class" = "free" ]; then
+            mode="direct"
+            reason="80/443 空闲或已是本站 edge"
+          elif [ "$https_class" = "nginx" ]; then
+            mode="behind-nginx"
+            reason="443 已被 Nginx 占用，挂到现有 Nginx"
+          elif [ "$https_class" = "caddy" ]; then
+            mode="behind-caddy"
+            reason="443 已被宿主机 Caddy 占用，写入现有 Caddyfile"
+          else
+            mode="behind-unknown"
+            reason="80 空闲但 443 被 ${https_proc:-unknown} 占用，不能安全抢端口"
+          fi
+          ;;
+        nginx)
           mode="behind-nginx"
-          reason="443 已被 Nginx 占用，改为挂到现有 Nginx 后面"
-        elif [ "$https_class" = "caddy" ]; then
+          reason="80 已被 Nginx(pid=${http_pid:-?}) 占用"
+          ;;
+        caddy)
           mode="behind-caddy"
-          reason="443 已被宿主机 Caddy 占用，改为写入现有 Caddyfile"
-        else
-          mode="direct"
-          reason="80 空闲，443 被 ${https_proc:-unknown} 占用；先占 80 做 HTTP-01，443 若冲突会再降级"
-        fi
-        ;;
-      nginx)
-        mode="behind-nginx"
-        reason="80 已被 Nginx(pid=${http_pid:-?}) 占用"
-        ;;
-      caddy)
-        mode="behind-caddy"
-        reason="80 已被宿主机 Caddy(pid=${http_pid:-?}) 占用"
-        ;;
-      other-caddy-container)
-        mode="behind-unknown"
-        reason="80 已被其他 Caddy 容器 ${http_docker} 占用，不能安全改写"
-        ;;
-      other-docker)
-        mode="behind-unknown"
-        reason="80 已被 Docker 容器 ${http_docker:-?} 占用"
-        ;;
-      panel-stack)
-        mode="behind-unknown"
-        reason="80 已被 ${http_proc} 占用（面板/代理栈）。若前面还有 Nginx，请把 80 交给 Nginx"
-        ;;
-      *)
-        mode="behind-unknown"
-        reason="80 已被 ${http_proc:-unknown} 占用"
-        ;;
-    esac
+          reason="80 已被宿主机 Caddy(pid=${http_pid:-?}) 占用"
+          ;;
+        other-caddy-container)
+          mode="behind-unknown"
+          reason="80 已被其他 Caddy 容器 ${http_docker} 占用，不能安全改写"
+          ;;
+        other-docker)
+          mode="behind-unknown"
+          reason="80 已被 Docker 容器 ${http_docker:-?} 占用"
+          ;;
+        panel-stack)
+          if command -v nginx >/dev/null 2>&1 && [ -n "$(find_nginx_dir)" ]; then
+            mode="behind-nginx"
+            reason="80 像面板栈，但本机有 Nginx，按 Nginx 接入"
+          else
+            mode="behind-unknown"
+            reason="80 已被 ${http_proc} 占用（面板/代理栈）"
+          fi
+          ;;
+        *)
+          mode="behind-unknown"
+          reason="80 已被 ${http_proc:-unknown} 占用"
+          ;;
+      esac
+    fi
   fi
 
   SITE_ADDRESS="${SITE_ADDRESS:-docker.nodelink.uk}"
@@ -307,7 +287,7 @@ detect() {
   emit CADDY_BIN "$(command -v caddy 2>/dev/null || true)"
   emit NGINX_DIR "$(find_nginx_dir)"
   emit HOST_CADDYFILE "$(find_host_caddyfile)"
-  emit BACKEND "127.0.0.1:${BACKEND_PORT}"
+  emit BACKEND "$BACKEND"
 }
 
 save_detect() {
@@ -325,28 +305,36 @@ save_detect() {
   log "原因: $REASON"
 }
 
+stop_edge_if_any() {
+  if command -v docker >/dev/null 2>&1; then
+    docker compose stop edge >/dev/null 2>&1 || true
+    docker compose rm -f edge >/dev/null 2>&1 || true
+  fi
+}
+
 configure() {
   load_dotenv
   save_detect
   # shellcheck disable=SC1090
   . "$STATE_FILE"
 
+  # 内部路由器永远本机 HTTP。证书只在边缘。
+  set_env HTTP_ONLY true
+  set_env HTTP_BIND 127.0.0.1
+  set_env HTTP_PORT "$BACKEND_PORT"
+  set_env HTTPS_BIND 127.0.0.1
+  set_env HTTPS_PORT 5443
+  set_env EDGE_MODE "$MODE"
+
   case "$MODE" in
     direct)
-      set_env HTTP_ONLY false
-      set_env HTTP_BIND 0.0.0.0
-      set_env HTTP_PORT 80
-      set_env HTTPS_BIND 0.0.0.0
-      set_env HTTPS_PORT 443
-      log "已写入 .env：镜像站直连 0.0.0.0:80/443"
+      set_env COMPOSE_PROFILES direct
+      log "已写入 .env：内部 127.0.0.1:${BACKEND_PORT}，边缘 profile=direct 占用 80/443"
       ;;
     behind-nginx|behind-caddy|behind-unknown)
-      set_env HTTP_ONLY true
-      set_env HTTP_BIND 127.0.0.1
-      set_env HTTP_PORT "$BACKEND_PORT"
-      set_env HTTPS_BIND 127.0.0.1
-      set_env HTTPS_PORT 5443
-      log "已写入 .env：镜像站仅本机 127.0.0.1:${BACKEND_PORT}（HTTP_ONLY=true，不抢 80/443）"
+      set_env COMPOSE_PROFILES ""
+      stop_edge_if_any
+      log "已写入 .env：内部仅 127.0.0.1:${BACKEND_PORT}，不抢 80/443（EDGE_MODE=$MODE）"
       ;;
     *)
       fail "未知模式 $MODE"
@@ -374,20 +362,8 @@ upsert_marked_file() {
   fi
 }
 
-nginx_http_only_server() {
-  site="$1"
+proxy_location() {
   cat <<EOF
-$MARKER_BEGIN
-server {
-    listen 80;
-    listen [::]:80;
-    server_name ${site};
-
-    location /.well-known/acme-challenge/ {
-        root ${ACME_WEBROOT};
-    }
-
-    location / {
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -399,7 +375,26 @@ server {
         proxy_read_timeout 3600;
         proxy_send_timeout 3600;
         client_max_body_size 0;
-        proxy_pass http://127.0.0.1:${BACKEND_PORT};
+        proxy_pass http://${BACKEND};
+EOF
+}
+
+nginx_http_only_server() {
+  site="$1"
+  cat <<EOF
+$MARKER_BEGIN
+# docker-mirror HTTP：ACME + 反代。这里绝不 301 到 HTTPS，避免橙云/面板重定向环。
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${site};
+
+    location /.well-known/acme-challenge/ {
+        root ${ACME_WEBROOT};
+    }
+
+    location / {
+$(proxy_location)
     }
 }
 $MARKER_END
@@ -426,6 +421,7 @@ nginx_ssl_server() {
 
   cat <<EOF
 $MARKER_BEGIN
+# HTTP 继续反代，不 301。证书续期和 Cloudflare Flexible 都不会环。
 server {
     listen 80;
     listen [::]:80;
@@ -436,7 +432,7 @@ server {
     }
 
     location / {
-        return 301 https://\$host\$request_uri;
+$(proxy_location)
     }
 }
 
@@ -455,15 +451,7 @@ ${http2_line}
     proxy_connect_timeout 60;
 
     location / {
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header Connection "";
-        proxy_buffering off;
-        proxy_request_buffering off;
-        proxy_pass http://127.0.0.1:${BACKEND_PORT};
+$(proxy_location)
     }
 }
 $MARKER_END
@@ -501,7 +489,6 @@ reload_nginx() {
   log "Nginx 已 reload"
 }
 
-# 写入 dest：先校验 ssl 行，再替换；nginx -t 失败则回滚并返回 1
 install_nginx_conf() {
   dest="$1"
   src="$2"
@@ -511,7 +498,6 @@ install_nginx_conf() {
     return 1
   fi
   bak="${dest}.ok"
-  # 坏掉的 ssl_certificate 不能当成回滚底稿（v1.0.4 线上就是这种文件）
   if [ -f "$dest" ] && [ "$(count_ssl_tokens "$dest")" = "ok" ]; then
     cp "$dest" "$bak"
   fi
@@ -528,6 +514,19 @@ install_nginx_conf() {
     return 1
   fi
   reload_nginx
+}
+
+disarm_conflicting_servernames() {
+  site="$1"
+  dest="$2"
+  if ! command -v python3 >/dev/null 2>&1; then
+    log "没有 python3，跳过拆掉冲突 server_name"
+    return 0
+  fi
+  dump="$(mktemp)"
+  nginx -T >"$dump" 2>/dev/null || true
+  python3 "$ROOT/scripts/nginx-disarm-servername.py" "$site" "$dest" "$dump" >&2 || true
+  rm -f "$dump"
 }
 
 ensure_certbot() {
@@ -557,9 +556,45 @@ write_live_file() {
 
 read_live_file() {
   [ -f "$CERT_LIVE_FILE" ] || fail "没有证书目录记录 $CERT_LIVE_FILE"
-  live="$(tr -d '\r' < "$CERT_LIVE_FILE" | sed -n '/^\/etc\/letsencrypt\/live\/[A-Za-z0-9._-]*$/p' | tail -n1)"
+  live="$(tr -d '\r' < "$CERT_LIVE_FILE" | sed -n '/^\/[A-Za-z0-9/._+-]*$/p' | tail -n1)"
   [ -n "$live" ] || fail "证书目录记录损坏：$CERT_LIVE_FILE"
   printf '%s' "$live"
+}
+
+find_existing_cert_dir() {
+  site="$1"
+  for d in \
+    "/etc/letsencrypt/live/${site}" \
+    "/root/cert/${site}" \
+    "/root/cert/${site}/" \
+    "/etc/nginx/ssl/${site}" \
+    "/usr/local/x-ui/cert/${site}"
+  do
+    d="${d%/}"
+    if [ -f "$d/fullchain.pem" ] && [ -f "$d/privkey.pem" ]; then
+      printf '%s' "$d"
+      return 0
+    fi
+    if [ -f "$d/fullchain.cer" ] && [ -f "$d/${site}.key" ]; then
+      printf '%s' "$d"
+      return 0
+    fi
+  done
+  printf ''
+}
+
+cert_pair_from_dir() {
+  d="$1"
+  site="$2"
+  if [ -f "$d/fullchain.pem" ] && [ -f "$d/privkey.pem" ]; then
+    printf '%s|%s' "$d/fullchain.pem" "$d/privkey.pem"
+    return 0
+  fi
+  if [ -f "$d/fullchain.cer" ] && [ -f "$d/${site}.key" ]; then
+    printf '%s|%s' "$d/fullchain.cer" "$d/${site}.key"
+    return 0
+  fi
+  return 1
 }
 
 issue_cert_webroot() {
@@ -567,15 +602,15 @@ issue_cert_webroot() {
   email="$2"
   live="/etc/letsencrypt/live/${site}"
 
-  if [ -f "$live/fullchain.pem" ] && [ -f "$live/privkey.pem" ]; then
-    log "已有证书 $live ，复用"
-    write_live_file "$live"
+  existing="$(find_existing_cert_dir "$site")"
+  if [ -n "$existing" ]; then
+    log "复用已有证书目录 $existing"
+    write_live_file "$existing"
     return 0
   fi
 
   ensure_certbot
   mkdir -p "$ACME_WEBROOT/.well-known/acme-challenge"
-  # 给 ACME 探活一个可写探测文件
   printf 'ok\n' > "$ACME_WEBROOT/.well-known/acme-challenge/.docker-mirror-ready"
 
   log "正在为 ${site} 申请 Let's Encrypt 证书（webroot=${ACME_WEBROOT}）..."
@@ -616,6 +651,18 @@ write_ssl_variants() {
   [ "$ok" -eq 1 ] || fail "三种 HTTP/2 写法都无法通过 nginx -t${last_err:+；}${last_err}"
 }
 
+wait_backend() {
+  i=0
+  while [ "$i" -lt 20 ]; do
+    if curl -fsS --connect-timeout 2 "http://${BACKEND}/healthz" >/dev/null 2>&1; then
+      return 0
+    fi
+    i=$((i + 1))
+    sleep 1
+  done
+  fail "本机 http://${BACKEND}/healthz 不通，先确认 docker compose 已起来"
+}
+
 integrate_nginx() {
   load_dotenv
   site="${SITE_ADDRESS:?SITE_ADDRESS 为空}"
@@ -633,7 +680,12 @@ integrate_nginx() {
     *[!A-Za-z0-9.-]*|"") fail "SITE_ADDRESS 非法：$site" ;;
   esac
 
-  log "写入 Nginx HTTP 站点（先保证 ACME 和本机反代）：$dest"
+  wait_backend
+
+  log "拆掉其它站点里冲突的 server_name ${site}（3x-ui/渡口默认站）"
+  disarm_conflicting_servernames "$site" "$dest"
+
+  log "写入 Nginx HTTP 站点：$dest"
   http_tmp="$(mktemp)"
   nginx_http_only_server "$site" > "$http_tmp"
   if ! install_nginx_conf "$dest" "$http_tmp"; then
@@ -642,20 +694,17 @@ integrate_nginx() {
   fi
   rm -f "$http_tmp"
 
-  if ! curl -fsS --connect-timeout 5 "http://127.0.0.1:${BACKEND_PORT}/healthz" >/dev/null 2>&1; then
-    fail "本机 127.0.0.1:${BACKEND_PORT}/healthz 不通，先确认 compose 已起来"
-  fi
-
   issue_cert_webroot "$site" "$email"
   live="$(read_live_file)"
-  cert="${live}/fullchain.pem"
-  key="${live}/privkey.pem"
+  pair="$(cert_pair_from_dir "$live" "$site")" || fail "证书目录 $live 里没有可用 pem"
+  cert="${pair%%|*}"
+  key="${pair#*|}"
   assert_pem_file "ssl_certificate" "$cert"
   assert_pem_file "ssl_certificate_key" "$key"
 
   log "写入 Nginx HTTPS 站点，证书=${cert}"
   write_ssl_variants "$site" "$cert" "$key" "$dest"
-  log "Nginx 已启用 HTTPS → 127.0.0.1:${BACKEND_PORT}"
+  log "Nginx 已把 ${site} → http://${BACKEND}（无二次跳转）"
 }
 
 caddy_site_block() {
@@ -663,8 +712,10 @@ caddy_site_block() {
   cat <<EOF
 $MARKER_BEGIN
 ${site} {
-	reverse_proxy 127.0.0.1:${BACKEND_PORT} {
+	reverse_proxy ${BACKEND} {
 		flush_interval -1
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
 		transport http {
 			read_timeout 1h
 			write_timeout 1h
@@ -683,7 +734,7 @@ reload_host_caddy() {
     return 0
   fi
   if command -v caddy >/dev/null 2>&1; then
-    caddy reload --config "$file" || caddy run --config "$file" &
+    caddy reload --config "$file" || true
     log "已执行 caddy reload --config $file"
     return 0
   fi
@@ -696,6 +747,7 @@ integrate_caddy() {
   file="$(find_host_caddyfile)"
   [ -n "$file" ] || fail "找不到宿主机 Caddyfile"
   [ -w "$file" ] || fail "没有权限写 $file"
+  wait_backend
   cp "$file" "${file}.bak.docker-mirror.$(date +%Y%m%d%H%M%S)"
   body="$(mktemp)"
   caddy_site_block "$site" > "$body"
@@ -705,52 +757,71 @@ integrate_caddy() {
   log "已把 ${site} 写入 $file ，证书由宿主机 Caddy 签发"
 }
 
+probe_url() {
+  url="$1"
+  extra="${2:-}"
+  # 不跟随跳转：308 环必须被看见
+  # shellcheck disable=SC2086
+  curl -sS -o /tmp/docker-mirror-probe.body -D /tmp/docker-mirror-probe.hdr \
+    -w '%{http_code}' --connect-timeout 10 --max-time 20 \
+    --max-redirs 0 $extra "$url" 2>/tmp/docker-mirror-probe.err || true
+}
+
 verify_public() {
   load_dotenv
   site="${SITE_ADDRESS:?}"
   log "== 验收 =="
-  if curl -fsS --connect-timeout 5 "http://127.0.0.1:${HTTP_PORT:-$BACKEND_PORT}/healthz" >/dev/null 2>&1; then
-    log "  [OK] 本机 http://127.0.0.1:${HTTP_PORT:-$BACKEND_PORT}/healthz"
+  if curl -fsS --connect-timeout 5 "http://${BACKEND}/healthz" >/dev/null 2>&1; then
+    log "  [OK] 本机 http://${BACKEND}/healthz"
   else
     fail "本机健康检查失败"
   fi
-  code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 15 --max-time 25 "https://${site}/healthz" || true)"
-  if [ "$code" = "200" ]; then
-    log "  [OK] https://${site}/healthz"
-    return 0
+
+  # 先打本机 443（绕过 Cloudflare），确认 SNI / 证书是我们的
+  local_code="$(probe_url "https://${site}/healthz" "--resolve ${site}:443:127.0.0.1")"
+  if [ "$local_code" = "200" ]; then
+    log "  [OK] 本机 443 SNI ${site} → 200"
+  else
+    log "  [WAIT] 本机 443 SNI HTTP ${local_code:-err}"
+    if [ -f /tmp/docker-mirror-probe.err ]; then
+      sed -n '1,4p' /tmp/docker-mirror-probe.err >&2 || true
+    fi
   fi
-  log "  [WAIT] https://${site}/healthz HTTP ${code:-timeout}（证书可能还在签发）"
+
   i=0
   while [ "$i" -lt 18 ]; do
-    i=$((i + 1))
-    sleep 5
-    code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 10 --max-time 20 "https://${site}/healthz" || true)"
+    code="$(probe_url "https://${site}/healthz")"
     if [ "$code" = "200" ]; then
       log "  [OK] https://${site}/healthz"
       return 0
     fi
-    log "  ... 第 ${i} 次：HTTP ${code:-timeout}"
+    if [ "$code" = "301" ] || [ "$code" = "302" ] || [ "$code" = "307" ] || [ "$code" = "308" ]; then
+      loc="$(awk 'tolower($1)=="location:"{print $2; exit}' /tmp/docker-mirror-probe.hdr 2>/dev/null || true)"
+      log "  [LOOP?] https://${site}/healthz 返回 ${code} → ${loc:-?}（边缘在二次跳转，内部路由不应 301）"
+    else
+      log "  ... 第 $((i + 1)) 次：HTTP ${code:-timeout}"
+    fi
+    i=$((i + 1))
+    sleep 5
   done
-  fail "公网 https://${site}/healthz 仍未通过。请看现有反代是否已加载 ${site}"
+  fail "公网 https://${site}/healthz 仍未通过。Cloudflare 必须灰云；3x-ui 不能再占用这个 server_name"
 }
 
 integrate() {
   load_dotenv
-  if [ ! -f "$STATE_FILE" ]; then
-    save_detect
-  fi
-  # shellcheck disable=SC1090
-  . "$STATE_FILE"
   save_detect
   # shellcheck disable=SC1090
   . "$STATE_FILE"
 
   case "$MODE" in
     direct)
-      log "直连模式：证书由镜像站 Caddy 申请，无需改 Nginx"
+      log "直连模式：证书由 edge 容器申请，内部 Caddy 只提供 HTTP"
+      if command -v docker >/dev/null 2>&1; then
+        COMPOSE_PROFILES=direct docker compose up -d edge >&2 || true
+      fi
       verify_public || true
       if ! curl -fsS --connect-timeout 15 "https://${SITE_ADDRESS}/healthz" >/dev/null 2>&1; then
-        log "直连签证书尚未完成，看： docker compose logs caddy --tail=80"
+        log "直连签证书尚未完成，看： docker compose logs edge --tail=80"
       fi
       ;;
     behind-nginx)
@@ -763,7 +834,7 @@ integrate() {
       ;;
     behind-unknown)
       log "无法安全自动改写占用 80 的进程（${HTTP80_PROC:-unknown} ${HTTP80_DOCKER}）。"
-      log "镜像站已在 127.0.0.1:${BACKEND_PORT} 就绪。请把下面片段交给占用 80 的软件："
+      log "镜像站已在 http://${BACKEND} 就绪。把下面片段交给占用 80 的软件："
       log ""
       log "Nginx:"
       nginx_http_only_server "${SITE_ADDRESS}" >&2

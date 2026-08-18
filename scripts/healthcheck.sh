@@ -12,7 +12,7 @@ if [ -f .env ]; then
 fi
 
 SITE_ADDRESS="${SITE_ADDRESS:-:80}"
-HTTP_ONLY="${HTTP_ONLY:-false}"
+HTTP_PORT="${HTTP_PORT:-5080}"
 
 ok() { printf '  [OK]  %s\n' "$1"; }
 fail() { printf '  [FAIL] %s\n' "$1"; FAILS=$((FAILS + 1)); }
@@ -27,27 +27,28 @@ fi
 
 echo
 echo "== 本地 / 站点健康检查 =="
-HTTP_PORT="${HTTP_PORT:-5080}"
 LOCAL="http://127.0.0.1:${HTTP_PORT}"
 if curl -fsS "${LOCAL}/healthz" >/dev/null 2>&1; then
-  ok "Caddy /healthz (${LOCAL})"
+  ok "内部路由 /healthz (${LOCAL})"
 else
-  fail "Caddy /healthz (${LOCAL}) 无法访问"
+  fail "内部路由 /healthz (${LOCAL}) 无法访问"
 fi
 
-code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 8 "${LOCAL}/v2/" || true)"
+code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 8 --max-redirs 0 "${LOCAL}/v2/" || true)"
 case "$code" in
   200|401) ok "Docker Hub 缓存 /v2/  HTTP $code" ;;
+  301|302|307|308) fail "内部路由对 /v2/ 做了跳转 HTTP $code（会和边缘 HTTPS 打架）" ;;
   *) fail "Docker Hub 缓存 /v2/  HTTP ${code:-timeout}" ;;
 esac
 
-# 有真实主机名时必须验公网 HTTPS。挂在现有 Nginx 后面时 HTTP_ONLY=true，
-# 但浏览器走的仍是 https://docker.xxx，不能只看 127.0.0.1:5080。
 if [ "$SITE_ADDRESS" != ":80" ] && printf '%s' "$SITE_ADDRESS" | grep -q '\.'; then
-  if curl -fsS "https://${SITE_ADDRESS}/healthz" >/dev/null 2>&1; then
-    ok "https://${SITE_ADDRESS}/healthz 证书与站点正常"
+  pub="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 12 --max-time 20 --max-redirs 0 "https://${SITE_ADDRESS}/healthz" || true)"
+  if [ "$pub" = "200" ]; then
+    ok "https://${SITE_ADDRESS}/healthz"
+  elif [ "$pub" = "301" ] || [ "$pub" = "302" ] || [ "$pub" = "307" ] || [ "$pub" = "308" ]; then
+    fail "https://${SITE_ADDRESS}/healthz 在跳转 HTTP $pub（边缘二次 301 或 Cloudflare 橙云）"
   else
-    fail "https://${SITE_ADDRESS}/healthz 失败（现有 Nginx/Caddy 未挂上本站，或证书未签下来）"
+    fail "https://${SITE_ADDRESS}/healthz 失败 HTTP ${pub:-timeout}"
   fi
 fi
 
@@ -71,8 +72,10 @@ done
 
 echo
 if [ "$FAILS" -gt 0 ]; then
-  echo "有 ${FAILS} 项失败。证书问题先看： docker compose logs caddy --tail=80"
-  echo "上游失败说明这台机器出不了网，不适合当加速站。"
+  echo "有 ${FAILS} 项失败。"
+  echo "内部路由看： docker compose logs caddy --tail=80"
+  echo "直连边缘看： docker compose logs edge --tail=80"
+  echo "Nginx 接入看： nginx -T 2>/dev/null | grep -n docker. -A2 | head"
   exit 1
 fi
 echo "健康检查通过。"

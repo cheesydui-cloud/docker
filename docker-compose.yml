@@ -1,0 +1,106 @@
+name: docker-mirror
+
+x-registry: &registry
+  image: registry:2.8.3
+  restart: unless-stopped
+  environment: &registry-env
+    HTTP_PROXY: ${HTTP_PROXY:-}
+    HTTPS_PROXY: ${HTTPS_PROXY:-}
+    NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,caddy}
+  volumes:
+    - ./registry/config.yml:/etc/docker/registry/config.yml:ro
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on:
+      - registry-dockerhub
+      - registry-ghcr
+      - registry-gcr
+      - registry-quay
+      - registry-k8s
+      - registry-nvcr
+      - registry-mcr
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+      DOMAIN: ${DOMAIN:-}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./www:/usr/share/caddy:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  registry-dockerhub:
+    <<: *registry
+    environment:
+      <<: *registry-env
+      REGISTRY_PROXY_REMOTEURL: https://registry-1.docker.io
+      REGISTRY_PROXY_USERNAME: ${DOCKERHUB_USERNAME:-}
+      REGISTRY_PROXY_PASSWORD: ${DOCKERHUB_PASSWORD:-}
+    volumes:
+      - ./registry/config.yml:/etc/docker/registry/config.yml:ro
+      - ./data/dockerhub:/var/lib/registry
+
+  registry-ghcr:
+    <<: *registry
+    environment:
+      <<: *registry-env
+      REGISTRY_PROXY_REMOTEURL: https://ghcr.io
+    volumes:
+      - ./registry/config.yml:/etc/docker/registry/config.yml:ro
+      - ./data/ghcr:/var/lib/registry
+
+  registry-gcr:
+    <<: *registry
+    environment:
+      <<: *registry-env
+      REGISTRY_PROXY_REMOTEURL: https://gcr.io
+    volumes:
+      - ./registry/config.yml:/etc/docker/registry/config.yml:ro
+      - ./data/gcr:/var/lib/registry
+
+  registry-quay:
+    <<: *registry
+    environment:
+      <<: *registry-env
+      REGISTRY_PROXY_REMOTEURL: https://quay.io
+    volumes:
+      - ./registry/config.yml:/etc/docker/registry/config.yml:ro
+      - ./data/quay:/var/lib/registry
+
+  registry-k8s:
+    <<: *registry
+    environment:
+      <<: *registry-env
+      REGISTRY_PROXY_REMOTEURL: https://registry.k8s.io
+    volumes:
+      - ./registry/config.yml:/etc/docker/registry/config.yml:ro
+      - ./data/k8s:/var/lib/registry
+
+  registry-nvcr:
+    <<: *registry
+    environment:
+      <<: *registry-env
+      REGISTRY_PROXY_REMOTEURL: https://nvcr.io
+    volumes:
+      - ./registry/config.yml:/etc/docker/registry/config.yml:ro
+      - ./data/nvcr:/var/lib/registry
+
+  registry-mcr:
+    <<: *registry
+    environment:
+      <<: *registry-env
+      REGISTRY_PROXY_REMOTEURL: https://mcr.microsoft.com
+    volumes:
+      - ./registry/config.yml:/etc/docker/registry/config.yml:ro
+      - ./data/mcr:/var/lib/registry
+
+volumes:
+  caddy_data:
+  caddy_config:

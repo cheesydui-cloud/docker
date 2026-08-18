@@ -1,0 +1,98 @@
+{
+	auto_https off
+	admin off
+}
+
+:80 {
+	encode gzip zstd
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	handle /v2* {
+		reverse_proxy registry-dockerhub:5000 {
+			flush_interval -1
+			transport http {
+				read_timeout 1h
+				write_timeout 1h
+				dial_timeout 30s
+			}
+		}
+	}
+
+	handle {
+		root * /usr/share/caddy
+		file_server
+	}
+}
+
+:5001 {
+	reverse_proxy registry-ghcr:5000 {
+		flush_interval -1
+		transport http {
+			read_timeout 1h
+			write_timeout 1h
+			dial_timeout 30s
+		}
+	}
+}
+
+:5002 {
+	reverse_proxy registry-gcr:5000 {
+		flush_interval -1
+		transport http {
+			read_timeout 1h
+			write_timeout 1h
+			dial_timeout 30s
+		}
+	}
+}
+
+:5003 {
+	reverse_proxy registry-quay:5000 {
+		flush_interval -1
+		transport http {
+			read_timeout 1h
+			write_timeout 1h
+			dial_timeout 30s
+		}
+	}
+}
+
+:5004 {
+	reverse_proxy registry-k8s:5000 {
+		flush_interval -1
+		transport http {
+			read_timeout 1h
+			write_timeout 1h
+			dial_timeout 30s
+		}
+	}
+}
+
+:5005 {
+	reverse_proxy registry-nvcr:5000 {
+		flush_interval -1
+		transport http {
+			read_timeout 1h
+			write_timeout 1h
+			dial_timeout 30s
+		}
+	}
+}
+
+:5006 {
+	reverse_proxy registry-mcr:5000 {
+		flush_interval -1
+		transport http {
+			read_timeout 1h
+			write_timeout 1h
+			dial_timeout 30s
+		}
+	}
+}

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Docker 镜像加速站</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #121a2b;
+      --line: #243049;
+      --text: #e8eefc;
+      --muted: #9aa8c7;
+      --accent: #4cc2ff;
+      --ok: #3dd68c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(900px 400px at 10% -10%, #1a3a66 0%, transparent 55%),
+        radial-gradient(700px 360px at 100% 0%, #163024 0%, transparent 50%),
+        var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    main { max-width: 920px; margin: 0 auto; padding: 48px 20px 80px; }
+    h1 { font-size: 34px; margin: 0 0 8px; letter-spacing: -0.03em; }
+    .sub { color: var(--muted); margin-bottom: 28px; }
+    .grid { display: grid; gap: 16px; }
+    .card {
+      background: rgba(18, 26, 43, 0.88);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 20px 22px;
+    }
+    h2 { margin: 0 0 10px; font-size: 18px; }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+    }
+    pre {
+      background: #0a1020;
+      border: 1px solid #1d2942;
+      border-radius: 12px;
+      padding: 14px 16px;
+      overflow: auto;
+      color: #d7e4ff;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    .pill {
+      display: inline-block;
+      background: #16324a;
+      color: var(--accent);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+    a { color: var(--accent); }
+    .ok { color: var(--ok); }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="pill">私有 Docker Registry 拉取缓存</div>
+    <h1>Docker 镜像加速站</h1>
+    <p class="sub">把国内拉不到的 Docker Hub / GHCR / GCR / Quay / k8s / NVIDIA / MCR 请求，缓存到这台能访问上游的服务器上。</p>
+
+    <div class="grid">
+      <section class="card">
+        <h2>1. Docker Hub（改 daemon.json，镜像名不用改）</h2>
+        <pre id="hub-https">{
+  "registry-mirrors": ["https://YOUR_DOMAIN"]
+}</pre>
+        <p>只有 IP、走 HTTP 时：</p>
+        <pre>{
+  "registry-mirrors": ["http://YOUR_IP"],
+  "insecure-registries": [
+    "YOUR_IP",
+    "YOUR_IP:80",
+    "YOUR_IP:5001",
+    "YOUR_IP:5002",
+    "YOUR_IP:5003",
+    "YOUR_IP:5004",
+    "YOUR_IP:5005",
+    "YOUR_IP:5006"
+  ]
+}</pre>
+        <p>一键配置：</p>
+        <pre>curl -fsSL http://YOUR_IP/install.sh | sudo MIRROR=http://YOUR_IP sh
+sudo systemctl restart docker
+docker pull nginx:alpine</pre>
+      </section>
+
+      <section class="card">
+        <h2>2. 其他仓库（改镜像名前缀）</h2>
+        <table>
+          <thead>
+            <tr><th>原地址</th><th>HTTPS 子域名</th><th>HTTP 端口</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>ghcr.io/xxx</td><td>ghcr.YOUR_DOMAIN/xxx</td><td>YOUR_IP:5001/xxx</td></tr>
+            <tr><td>gcr.io/xxx</td><td>gcr.YOUR_DOMAIN/xxx</td><td>YOUR_IP:5002/xxx</td></tr>
+            <tr><td>quay.io/xxx</td><td>quay.YOUR_DOMAIN/xxx</td><td>YOUR_IP:5003/xxx</td></tr>
+            <tr><td>registry.k8s.io/xxx</td><td>k8s.YOUR_DOMAIN/xxx</td><td>YOUR_IP:5004/xxx</td></tr>
+            <tr><td>nvcr.io/xxx</td><td>nvcr.YOUR_DOMAIN/xxx</td><td>YOUR_IP:5005/xxx</td></tr>
+            <tr><td>mcr.microsoft.com/xxx</td><td>mcr.YOUR_DOMAIN/xxx</td><td>YOUR_IP:5006/xxx</td></tr>
+          </tbody>
+        </table>
+        <pre># 原命令
+docker pull ghcr.io/actions/runner:latest
+# HTTPS
+docker pull ghcr.YOUR_DOMAIN/actions/runner:latest
+# HTTP
+docker pull YOUR_IP:5001/actions/runner:latest</pre>
+      </section>
+
+      <section class="card">
+        <h2>3. Kubernetes / containerd</h2>
+        <pre>version = 2
+
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
+  endpoint = ["https://YOUR_DOMAIN"]
+
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."ghcr.io"]
+  endpoint = ["https://ghcr.YOUR_DOMAIN"]
+
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry.k8s.io"]
+  endpoint = ["https://k8s.YOUR_DOMAIN"]</pre>
+      </section>
+
+      <section class="card">
+        <h2>注意</h2>
+        <p class="ok">加速站所在机器必须能访问官方仓库，或通过 HTTP_PROXY 出网。国内同机房互拷缓存才有意义。</p>
+        <p>建议填写 Docker Hub 账号，避免匿名拉取被限流。私有镜像、登录鉴权仓库请继续走原地址。</p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

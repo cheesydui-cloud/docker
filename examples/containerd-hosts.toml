@@ -1,0 +1,14 @@
+# containerd 1.5+ 推荐用 hosts 目录，而不是老的 registry.mirrors。
+# 放到： /etc/containerd/certs.d/docker.io/hosts.toml
+# 其他仓库同理，目录名换成 ghcr.io / registry.k8s.io 等。
+
+server = "https://registry-1.docker.io"
+
+[host."https://mirror.example.com"]
+  capabilities = ["pull", "resolve"]
+
+# HTTP 加速站示例：
+# [host."http://10.0.0.8"]
+#   capabilities = ["pull", "resolve"]
+#   skip_verify = true
+#   plain_http = true

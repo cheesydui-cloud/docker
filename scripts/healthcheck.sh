@@ -15,6 +15,8 @@ SITE_ADDRESS="${SITE_ADDRESS:-:80}"
 HTTP_PORT="${HTTP_PORT:-5080}"
 PANEL_ADDRESS="${PANEL_ADDRESS:-}"
 PANEL_PORT="${PANEL_PORT:-8088}"
+GITHUB_PROXY_ENABLED="${GITHUB_PROXY_ENABLED:-false}"
+GITHUB_PROXY_PORT="${GITHUB_PROXY_PORT:-3128}"
 
 ok() { printf '  [OK]  %s\n' "$1"; }
 fail() { printf '  [FAIL] %s\n' "$1"; FAILS=$((FAILS + 1)); }
@@ -67,6 +69,21 @@ if [ "$SITE_ADDRESS" != ":80" ] && printf '%s' "$SITE_ADDRESS" | grep -q '\.'; t
     fail "https://${SITE_ADDRESS}/healthz 失败 HTTP ${pub:-timeout}"
   fi
 fi
+
+echo
+echo "== GitHub 正向代理 =="
+case "$(printf '%s' "$GITHUB_PROXY_ENABLED" | tr '[:upper:]' '[:lower:]')" in
+  1|true|yes|on)
+    if command -v docker >/dev/null 2>&1 && docker compose --profile github-proxy ps --status running --format '{{.Service}}' 2>/dev/null | grep -qx github-proxy; then
+      ok "github-proxy 容器在跑（:${GITHUB_PROXY_PORT}）"
+    else
+      fail "已开启 GitHub 代理，但 github-proxy 没在跑"
+    fi
+    ;;
+  *)
+    echo "  [SKIP] 未开启"
+    ;;
+esac
 
 echo
 echo "== 上游连通性（美国服务器必须能访问） =="

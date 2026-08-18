@@ -185,8 +185,8 @@ ACME_EMAIL=${ACME_EMAIL}
 HTTP_ONLY=false
 DOCKERHUB_USERNAME=${HUB_USER}
 DOCKERHUB_PASSWORD=${HUB_TOKEN}
-HTTP_PROXY=
-HTTPS_PROXY=
+	HTTP_PROXY=
+	HTTPS_PROXY=
 	NO_PROXY=localhost,127.0.0.1,caddy,registry-dockerhub,registry-ghcr,registry-gcr,registry-quay,registry-k8s,registry-nvcr,registry-mcr
 	HTTP_BIND=127.0.0.1
 	HTTP_PORT=5080
@@ -196,6 +196,9 @@ HTTPS_PROXY=
 	EDGE_MODE=
 	PANEL_ADDRESS=panel.${DOMAIN}
 	PANEL_PORT=${PANEL_PORT}
+	GITHUB_PROXY_ENABLED=false
+	GITHUB_PROXY_PORT=3128
+	GITHUB_PROXY_ALLOW=
 	EOF
 
 if [ "$SKIP_DNS" != "true" ]; then
@@ -214,6 +217,7 @@ sh scripts/adapt-host.sh configure
 log "启动服务"
 docker compose pull
 docker compose up -d
+sh scripts/apply-github-proxy.sh || true
 
 log "接入现有 Nginx/Caddy 并处理证书"
 	sh scripts/adapt-host.sh integrate

@@ -43,6 +43,9 @@ ENV_KEYS = [
     "PANEL_ADDRESS",
     "PANEL_PORT",
     "EDGE_PREFERENCE",
+    "GITHUB_PROXY_ENABLED",
+    "GITHUB_PROXY_PORT",
+    "GITHUB_PROXY_ALLOW",
 ]
 
 
@@ -130,6 +133,9 @@ def load_env() -> dict:
         "PANEL_ADDRESS": "",
         "PANEL_PORT": str(PORT),
         "EDGE_PREFERENCE": "auto",
+        "GITHUB_PROXY_ENABLED": "false",
+        "GITHUB_PROXY_PORT": "3128",
+        "GITHUB_PROXY_ALLOW": "",
     }
     if not ENV_FILE.exists():
         return data
@@ -173,6 +179,19 @@ def write_env(values: dict) -> None:
         current["HTTP_ONLY"] = "true"
     else:
         current["HTTP_ONLY"] = "false"
+    if current.get("GITHUB_PROXY_ENABLED", "false").lower() in {"1", "true", "yes", "on"}:
+        current["GITHUB_PROXY_ENABLED"] = "true"
+    else:
+        current["GITHUB_PROXY_ENABLED"] = "false"
+    port = (current.get("GITHUB_PROXY_PORT") or "3128").strip()
+    if not port.isdigit() or not (1024 <= int(port) <= 65535):
+        port = "3128"
+    if port in {"80", "443", "7788", "5080", "5443", "8088", "22"}:
+        port = "3128"
+    current["GITHUB_PROXY_PORT"] = port
+    allow = current.get("GITHUB_PROXY_ALLOW", "") or ""
+    allow = allow.replace(",", " ").replace(";", " ")
+    current["GITHUB_PROXY_ALLOW"] = ",".join(allow.split())
     lines = [
         f"SITE_ADDRESS={current['SITE_ADDRESS']}",
         f"DOMAIN={current['DOMAIN']}",
@@ -192,6 +211,9 @@ def write_env(values: dict) -> None:
         f"EDGE_PREFERENCE={current.get('EDGE_PREFERENCE', 'auto')}",
         f"PANEL_ADDRESS={current.get('PANEL_ADDRESS', '')}",
         f"PANEL_PORT={current.get('PANEL_PORT', str(PORT))}",
+        f"GITHUB_PROXY_ENABLED={current.get('GITHUB_PROXY_ENABLED', 'false')}",
+        f"GITHUB_PROXY_PORT={current.get('GITHUB_PROXY_PORT', '3128')}",
+        f"GITHUB_PROXY_ALLOW={current.get('GITHUB_PROXY_ALLOW', '')}",
         "",
     ]
     ENV_FILE.write_text("\n".join(lines), encoding="utf-8")
@@ -284,6 +306,11 @@ def deploy_job(payload: dict) -> None:
         append_job(out)
         if code != 0:
             raise RuntimeError("docker compose up 失败")
+        append_job("== GitHub 正向代理 ==")
+        code, out = run_cmd(["sh", "scripts/apply-github-proxy.sh"], timeout=180)
+        append_job(out)
+        if code != 0:
+            raise RuntimeError("GitHub 代理处理失败")
         time.sleep(3)
         append_job("== 接入现有 Nginx/Caddy 并处理证书 ==")
         code, out = run_cmd(["sh", "scripts/adapt-host.sh", "integrate"], timeout=240)
@@ -351,6 +378,22 @@ def upgrade_job() -> None:
         if code != 0:
             raise RuntimeError("升级失败")
         append_job("升级完成。请刷新控制台。")
+        _end_job(True)
+    except Exception as exc:  # noqa: BLE001
+        append_job(f"失败：{exc}")
+        _end_job(False)
+
+
+def github_proxy_job() -> None:
+    _begin_job("应用 GitHub 正向代理")
+    try:
+        code, out = run_cmd(["sh", "scripts/apply-github-proxy.sh"], timeout=180)
+        append_job(out)
+        if code != 0:
+            raise RuntimeError("GitHub 代理处理失败")
+        _, client = run_cmd(["sh", "scripts/print-client-config.sh"], timeout=20)
+        append_job(client)
+        append_job("完成。Docker 加速站没有动。")
         _end_job(True)
     except Exception as exc:  # noqa: BLE001
         append_job(f"失败：{exc}")
@@ -439,6 +482,7 @@ def compose_logs(service: str = "caddy") -> str:
         "registry-k8s",
         "registry-nvcr",
         "registry-mcr",
+        "github-proxy",
     } else "caddy"
     _, out = run_cmd(["docker", "compose", "logs", "--tail=120", service], timeout=30)
     return out
@@ -572,9 +616,17 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(409, {"error": "已有部署任务在跑，请稍候"})
                 return
             self._json(200, {"ok": True, "message": "已开始部署"})
-        elif path == "/api/restart":
-            _, out = run_cmd(["docker", "compose", "up", "-d"], timeout=180)
-            self._json(200, {"output": out})
+        elif path == "/api/github-proxy":
+            body = self._read_json()
+            write_env({
+                "GITHUB_PROXY_ENABLED": body.get("GITHUB_PROXY_ENABLED"),
+                "GITHUB_PROXY_PORT": body.get("GITHUB_PROXY_PORT"),
+                "GITHUB_PROXY_ALLOW": body.get("GITHUB_PROXY_ALLOW"),
+            })
+            if not start_fn_job(github_proxy_job):
+                self._json(409, {"error": "已有任务在跑，请稍候"})
+                return
+            self._json(200, {"ok": True, "message": "已开始应用 GitHub 代理"})
         elif path == "/api/stop":
             _, out = run_cmd(["docker", "compose", "down"], timeout=120)
             self._json(200, {"output": out})

@@ -19,7 +19,8 @@ fi
 
 if [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
   log "停止容器"
-  (cd "$INSTALL_DIR" && docker compose down --remove-orphans) || true
+  (cd "$INSTALL_DIR" && docker compose --profile github-proxy --profile direct down --remove-orphans) || \
+    (cd "$INSTALL_DIR" && docker compose down --remove-orphans) || true
 fi
 
 if command -v systemctl >/dev/null 2>&1; then

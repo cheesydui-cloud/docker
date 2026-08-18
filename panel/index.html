@@ -407,6 +407,27 @@
         </div>
       </section>
       <section class="card">
+        <h2>GitHub 代理</h2>
+        <label class="check"><input id="GITHUB_PROXY_ENABLED" type="checkbox"> 开启</label>
+        <div class="row">
+          <div class="field">
+            <label for="GITHUB_PROXY_PORT">端口</label>
+            <input id="GITHUB_PROXY_PORT" value="3128" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="GITHUB_PROXY_ALLOW">允许的国内 IP</label>
+            <input id="GITHUB_PROXY_ALLOW" placeholder="1.2.3.4 5.6.7.8" autocomplete="off">
+          </div>
+        </div>
+        <pre id="github-proxy-snippet">export http_proxy=http://美国机IP:3128
+export https_proxy=http://美国机IP:3128
+export no_proxy=localhost,127.0.0.1</pre>
+        <div class="btns" style="margin-top:12px">
+          <button class="btn primary" type="button" onclick="saveGithubProxy()">保存并应用</button>
+          <button class="btn" type="button" onclick="copyGithubProxy()">复制命令</button>
+        </div>
+      </section>
+      <section class="card">
         <h2>维护</h2>
         <div class="btns">
           <button class="btn" type="button" onclick="runUpgrade()">升级</button>
@@ -446,6 +467,7 @@
           <button class="btn" type="button" onclick="logs('caddy')">内部路由</button>
           <button class="btn" type="button" onclick="logs('edge')">边缘证书</button>
           <button class="btn" type="button" onclick="logs('registry-dockerhub')">dockerhub</button>
+          <button class="btn" type="button" onclick="logs('github-proxy')">github-proxy</button>
         </div>
         <pre id="logs">(空)</pre>
       </section>
@@ -551,6 +573,14 @@ async function boot() {
     }
     $("DOCKERHUB_PASSWORD").placeholder = cfg.DOCKERHUB_PASSWORD_SET ? "已保存，留空不改" : "建议填写 Access Token";
     if (cfg.VERSION && $("app-version")) $("app-version").textContent = cfg.VERSION;
+    if ($("GITHUB_PROXY_ENABLED")) {
+      $("GITHUB_PROXY_ENABLED").checked = /^(1|true|yes|on)$/i.test(cfg.GITHUB_PROXY_ENABLED || "");
+    }
+    if ($("GITHUB_PROXY_PORT") && cfg.GITHUB_PROXY_PORT) $("GITHUB_PROXY_PORT").value = cfg.GITHUB_PROXY_PORT;
+    if ($("GITHUB_PROXY_ALLOW") && cfg.GITHUB_PROXY_ALLOW !== undefined) {
+      $("GITHUB_PROXY_ALLOW").value = String(cfg.GITHUB_PROXY_ALLOW || "").replace(/[,;]+/g, " ").trim();
+    }
+    renderGithubSnippet();
     refreshOverview();
     pollJob();
   } catch (e) {
@@ -558,6 +588,18 @@ async function boot() {
     $("login-screen").classList.remove("ghost");
     $("app").classList.add("ghost");
   }
+}
+
+function renderGithubSnippet() {
+  const el = $("github-proxy-snippet");
+  if (!el) return;
+  const port = ($("GITHUB_PROXY_PORT") && $("GITHUB_PROXY_PORT").value.trim()) || "3128";
+  const site = ($("SITE_ADDRESS") && $("SITE_ADDRESS").value.trim()) || "";
+  const noProxy = site ? "localhost,127.0.0.1," + site : "localhost,127.0.0.1";
+  el.textContent =
+    "export http_proxy=http://美国机IP:" + port + "\n" +
+    "export https_proxy=http://美国机IP:" + port + "\n" +
+    "export no_proxy=" + noProxy;
 }
 
 function formPayload() {
@@ -571,6 +613,9 @@ function formPayload() {
     DOCKERHUB_USERNAME: $("DOCKERHUB_USERNAME").value.trim(),
     HTTP_PROXY: $("HTTP_PROXY").value.trim(),
     HTTPS_PROXY: $("HTTP_PROXY").value.trim(),
+    GITHUB_PROXY_ENABLED: ($("GITHUB_PROXY_ENABLED") && $("GITHUB_PROXY_ENABLED").checked) ? "true" : "false",
+    GITHUB_PROXY_PORT: $("GITHUB_PROXY_PORT") ? $("GITHUB_PROXY_PORT").value.trim() : "3128",
+    GITHUB_PROXY_ALLOW: $("GITHUB_PROXY_ALLOW") ? $("GITHUB_PROXY_ALLOW").value.trim() : "",
     skip_dns: $("skip_dns").checked,
   };
   const pwd = $("DOCKERHUB_PASSWORD").value.trim();
@@ -672,6 +717,37 @@ async function saveOnly() {
     const r = await api("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(formPayload())});
     showResult(r.ok ? "已保存，还没有部署。" : (r.error || "保存失败"), r.ok ? "ok" : "bad", true);
   } catch (e) { showResult("保存失败：" + e.message, "bad", true); }
+}
+
+async function saveGithubProxy() {
+  renderGithubSnippet();
+  const payload = {
+    GITHUB_PROXY_ENABLED: ($("GITHUB_PROXY_ENABLED") && $("GITHUB_PROXY_ENABLED").checked) ? "true" : "false",
+    GITHUB_PROXY_PORT: $("GITHUB_PROXY_PORT") ? $("GITHUB_PROXY_PORT").value.trim() : "3128",
+    GITHUB_PROXY_ALLOW: $("GITHUB_PROXY_ALLOW") ? $("GITHUB_PROXY_ALLOW").value.trim() : "",
+  };
+  if (payload.GITHUB_PROXY_ENABLED === "true" && !payload.GITHUB_PROXY_ALLOW) {
+    showResult("开启代理必须填写允许的国内 IP", "bad", true);
+    return;
+  }
+  try {
+    const r = await api("/api/github-proxy", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(payload)
+    });
+    showResult(r.message || "已开始应用 GitHub 代理", "ok", true);
+    pollJob();
+  } catch (e) {
+    showResult("应用代理失败：" + e.message, "bad", true);
+  }
+}
+
+function copyGithubProxy() {
+  renderGithubSnippet();
+  const text = $("github-proxy-snippet") ? $("github-proxy-snippet").textContent : "";
+  navigator.clipboard.writeText(text).then(() => showResult("已复制代理命令", "ok", true))
+    .catch(() => showResult(text, "ok", true));
 }
 
 async function changeAccount() {

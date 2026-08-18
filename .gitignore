@@ -3,6 +3,7 @@ data/
 data/adapt/
 panel/.secret
 certs/
+proxy/tinyproxy.conf
 *.log
 .DS_Store
 .DS_Store?

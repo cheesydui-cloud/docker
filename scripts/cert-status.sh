@@ -28,6 +28,20 @@ kv backend_port "$HTTP_PORT"
 kv panel "$PANEL_ADDRESS"
 kv panel_port "$PANEL_PORT"
 
+GITHUB_PROXY_ENABLED="${GITHUB_PROXY_ENABLED:-false}"
+GITHUB_PROXY_PORT="${GITHUB_PROXY_PORT:-3128}"
+kv github_proxy "$GITHUB_PROXY_ENABLED"
+kv github_proxy_port "$GITHUB_PROXY_PORT"
+proxy_up=no
+if printf '%s' "$GITHUB_PROXY_ENABLED" | grep -Eiq '^(1|true|yes|on)$'; then
+  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    if docker compose --profile github-proxy ps --status running --format '{{.Name}}' 2>/dev/null | grep -q .; then
+      proxy_up=yes
+    fi
+  fi
+fi
+kv github_proxy_up "$proxy_up"
+
 if curl -fsS --connect-timeout 3 --max-time 8 "http://127.0.0.1:${HTTP_PORT}/healthz" >/dev/null 2>&1; then
   kv backend ok
 else

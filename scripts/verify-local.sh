@@ -27,6 +27,9 @@ for f in \
   scripts/adapt-host.sh \
   scripts/upgrade.sh \
   scripts/uninstall.sh \
+  scripts/render-github-proxy.sh \
+  scripts/apply-github-proxy.sh \
+  proxy/tinyproxy.conf.tpl \
   scripts/render-edge.sh \
   scripts/nginx-disarm-servername.py \
   scripts/cert-status.sh \
@@ -174,6 +177,37 @@ if grep -q 'systemctl restart docker-mirror-panel' scripts/start-panel.sh && gre
 else
   fail "升级可能仍沿用旧面板进程"
 fi
+if grep -q 'github-proxy' docker-compose.yml && grep -Fq 'profiles: ["github-proxy"]' docker-compose.yml && grep -q 'GITHUB_PROXY_ENABLED' panel/app.py && grep -q 'id="GITHUB_PROXY_ENABLED"' panel/index.html && grep -q '/api/github-proxy' panel/app.py; then
+  ok "GitHub 代理独立开关已贯通"
+else
+  fail "GitHub 代理未贯通面板 / compose"
+fi
+if grep -q '3128' docker-compose.yml && ! grep -q 'github-proxy' caddy/Caddyfile; then
+  ok "GitHub 代理不走加速站 80/443"
+else
+  fail "GitHub 代理不该挂到加速站 Caddy"
+fi
+if grep -q 'apply-github-proxy.sh' scripts/upgrade.sh && grep -q 'apply-github-proxy.sh' scripts/deploy.sh; then
+  ok "部署/升级会按开关处理代理"
+else
+  fail "部署或升级没接代理脚本"
+fi
+TMP_ALLOW="$(mktemp -d)"
+cp -R "$ROOT/." "$TMP_ALLOW/src" 2>/dev/null || true
+# 只拷必要文件做渲染检查
+mkdir -p "$TMP_ALLOW/src/proxy"
+cp "$ROOT/proxy/tinyproxy.conf.tpl" "$TMP_ALLOW/src/proxy/"
+cp "$ROOT/scripts/render-github-proxy.sh" "$TMP_ALLOW/src/scripts/" 2>/dev/null || mkdir -p "$TMP_ALLOW/src/scripts"
+cp "$ROOT/scripts/render-github-proxy.sh" "$TMP_ALLOW/src/scripts/render-github-proxy.sh"
+printf 'GITHUB_PROXY_ALLOW=1.2.3.4,5.6.7.8\n' > "$TMP_ALLOW/src/.env"
+if ( cd "$TMP_ALLOW/src" && sh scripts/render-github-proxy.sh >/dev/null ) \
+  && grep -q 'Allow 1.2.3.4' "$TMP_ALLOW/src/proxy/tinyproxy.conf" \
+  && grep -q 'Allow 5.6.7.8' "$TMP_ALLOW/src/proxy/tinyproxy.conf"; then
+  ok "tinyproxy 按允许 IP 生成 Allow"
+else
+  fail "tinyproxy 配置未写入允许 IP"
+fi
+rm -rf "$TMP_ALLOW"
 if grep -R -n 'nodelink.uk' --include='*.sh' --include='*.py' --include='*.yml' --include='*.html' --include='*.md' --include='*.example' --include='*.conf' --include='*.caddyfile' . | grep -v './.git/' | grep -v './scripts/verify-local.sh'; then
   fail "代码里仍有写死的 nodelink.uk"
 else
@@ -197,6 +231,7 @@ need = [
     "registry-mcr",
     "caddy",
     "edge",
+    "github-proxy",
     "REGISTRY_PROXY_REMOTEURL",
 ]
 missing = [n for n in need if n not in text]

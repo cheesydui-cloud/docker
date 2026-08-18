@@ -51,3 +51,12 @@
 
 `registry-mirrors` 只认 Docker Hub，填 `https://SITE_ADDRESS`。  
 Cloudflare 必须灰云。
+
+## GitHub 正向代理（可选）
+
+国内机要原样跑 `curl https://raw.githubusercontent.com/...` / `git clone https://github.com/...` 时，另起 `github-proxy`（tinyproxy，compose profile `github-proxy`）。
+
+- 默认关。开了必须填 `GITHUB_PROXY_ALLOW`，否则不监听。
+- 默认端口 `3128`，不占用 80/443/7788，也不挂到 `SITE_ADDRESS`。
+- 国内机设 `https_proxy=http://美国机IP:3128`，GitHub URL 不用改。
+- 和 Docker 缓存独立，不是二选一。

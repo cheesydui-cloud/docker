@@ -15,6 +15,9 @@ fi
 SITE_ADDRESS="${SITE_ADDRESS:-mirror.example.com}"
 DOMAIN="${DOMAIN:-example.com}"
 MIRROR="https://${SITE_ADDRESS}"
+GITHUB_PROXY_ENABLED="${GITHUB_PROXY_ENABLED:-false}"
+GITHUB_PROXY_PORT="${GITHUB_PROXY_PORT:-3128}"
+GITHUB_PROXY_ALLOW="${GITHUB_PROXY_ALLOW:-}"
 
 cat <<EOF
 ======== 国内 Docker 客户端 ========
@@ -53,3 +56,35 @@ server = "https://registry-1.docker.io"
 [host."${MIRROR}"]
   capabilities = ["pull", "resolve"]
 EOF
+
+enabled="$(printf '%s' "$GITHUB_PROXY_ENABLED" | tr '[:upper:]' '[:lower:]')"
+case "$enabled" in
+  1|true|yes|on)
+    cat <<EOF
+
+======== 国内机访问 GitHub（正向代理） ========
+
+在国内机器上执行一次（把美国机IP换成这台 VPS 的公网 IP）：
+
+  export http_proxy=http://美国机IP:${GITHUB_PROXY_PORT}
+  export https_proxy=http://美国机IP:${GITHUB_PROXY_PORT}
+  export no_proxy=localhost,127.0.0.1,${SITE_ADDRESS}
+
+之后命令不用改：
+
+  curl -fsSL https://raw.githubusercontent.com/user/repo/main/install.sh | bash
+  git clone https://github.com/user/repo.git
+
+允许的国内 IP： ${GITHUB_PROXY_ALLOW:-（未填）}
+Docker 拉镜像不要走这个代理，继续用上面的加速站。
+EOF
+    ;;
+  *)
+    cat <<'EOF'
+
+======== 国内机访问 GitHub ========
+
+未开启。在控制台「系统设置」打开 GitHub 代理，并填国内机器公网 IP。
+EOF
+    ;;
+esac

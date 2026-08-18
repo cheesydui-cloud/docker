@@ -152,8 +152,30 @@ docker pull registry.k8s.io/pause:3.9
 
 # 改成
 docker pull ghcr.你的域名/actions/runner:latest
-docker pull k8s.你的域名/pause:3.9
+  docker pull k8s.你的域名/pause:3.9
 ```
+
+### 国内机跑 GitHub 脚本（和国外同一条命令）
+
+Docker 加速站**不会**改 `github.com` / `raw.githubusercontent.com` 的地址。  
+要在国内机原样 `curl` / `git clone`，在控制台 **系统设置 → GitHub 代理** 打开开关，填这台国内机的公网 IP，保存。
+
+美国机安全组再放行该端口（默认 **TCP 3128**，不要用 80/443/7788）。然后在国内机执行一次：
+
+```bash
+export http_proxy=http://美国机IP:3128
+export https_proxy=http://美国机IP:3128
+export no_proxy=localhost,127.0.0.1,mirror.你的域名
+```
+
+之后不用改 URL：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/user/repo/main/install.sh | bash
+git clone https://github.com/user/repo.git
+```
+
+Docker 拉镜像继续走加速站，不要走这个代理。没填允许 IP 时代理不会对外监听。
 
 ---
 
@@ -199,6 +221,7 @@ KEEP_DATA=1 curl -fsSL "https://raw.githubusercontent.com/cheesydui-cloud/docker
 | `toomanyrequests` | 加 `--hub-user` / `--hub-token` 后重跑或改 `.env` 再 `docker compose up -d` |
 | 群晖填了还是很慢 / 失败 | 确认填的是 `https://mirror.域名`，并已重启套件 |
 | `ghcr.io` / `k8s` 还是拉不到 | 正常，要改镜像前缀，不是只填加速地址 |
+| 国内机 `curl github.com` 超时 | 这是 GitHub 网页/脚本，不是 Docker 缓存。开系统设置里的 GitHub 代理，并设 `https_proxy` |
 | 面板 `:8088` 显示「不安全」 | 正常。把 `panel` A 记录指到服务器后再升级，走 `https://panel.域名` |
 | 面板按钮没反应 | 强制刷新控制台（Ctrl/Cmd+Shift+R）。结果在页面下方「操作结果」 |
 

@@ -57,6 +57,8 @@ sh scripts/render-edge.sh
 
 echo "正在启动镜像加速站..."
 docker compose up -d
+echo "按开关处理 GitHub 正向代理..."
+sh scripts/apply-github-proxy.sh || true
 echo "把域名接到现有 Nginx/Caddy（如需要）并处理证书..."
 sh scripts/adapt-host.sh integrate
 

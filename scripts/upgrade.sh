@@ -114,8 +114,11 @@ sh scripts/render-caddyfile.sh
 sh scripts/render-edge.sh
 
 log "更新容器"
-docker compose pull
-docker compose up -d
+	docker compose pull
+	docker compose up -d
+
+	log "按开关处理 GitHub 正向代理"
+	sh scripts/apply-github-proxy.sh || true
 
 log "重新写入 Nginx/Caddy 并处理证书"
 sh scripts/adapt-host.sh integrate

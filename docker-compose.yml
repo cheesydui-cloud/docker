@@ -117,6 +117,16 @@ services:
       - ./registry/config.yml:/etc/docker/registry/config.yml:ro
       - ./data/mcr:/var/lib/registry
 
+  # 国内机 GitHub 正向代理。独立 profile，不占 80/443，也不改 Docker 加速站。
+  github-proxy:
+    image: kalaksi/tinyproxy:latest
+    restart: unless-stopped
+    profiles: ["github-proxy"]
+    ports:
+      - "0.0.0.0:${GITHUB_PROXY_PORT:-3128}:8888"
+    volumes:
+      - ./proxy/tinyproxy.conf:/etc/tinyproxy/tinyproxy.conf:ro
+
 volumes:
   edge_data:
   edge_config:

@@ -57,6 +57,8 @@ curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install
 
 安全组额外放行 **TCP 8088**（建议只给你自己的 IP）。域名、证书、重启、日志都在这个页面完成。
 
+`http://IP:8088` 本身没有 HTTPS，Chrome 写「不安全」是正常的。真正给群晖填的是 `https://docker.你的域名`，证书是 Let's Encrypt。
+
 ### 任意机器怎么选边缘（不用你判断）
 
 缓存永远只听本机 `127.0.0.1:5080`，**内部不再签证书、不做 301**。  
@@ -177,5 +179,7 @@ curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/scripts
 | `toomanyrequests` | 加 `--hub-user` / `--hub-token` 后重跑或改 `.env` 再 `docker compose up -d` |
 | 群晖填了还是很慢 / 失败 | 确认填的是 `https://mirror.域名`，并已重启套件 |
 | `ghcr.io` / `k8s` 还是拉不到 | 正常，要改镜像前缀，不是只填加速地址 |
+| 面板 `:8088` 显示「不安全」 | 正常。面板是 HTTP。Let's Encrypt 挂在 `https://加速站主机名` |
+| 面板按钮没反应 | 强制刷新控制台（Ctrl/Cmd+Shift+R）。结果在页面下方「操作结果」 |
 
 这是**拉取缓存**，不是推送仓库，也不要裸奔成对全世界开放的公共镜像站（建议安全组只给自己用，或前面加防火墙）。

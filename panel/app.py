@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlparse
 ROOT = Path(os.environ.get("MIRROR_ROOT", Path(__file__).resolve().parent.parent)).resolve()
 SECRET_FILE = ROOT / "panel" / ".secret"
 ENV_FILE = ROOT / ".env"
+PAGE_FILE = ROOT / "panel" / "index.html"
 HOST = os.environ.get("PANEL_HOST", "0.0.0.0")
 PORT = int(os.environ.get("PANEL_PORT", "8088"))
 JOB_LOCK = threading.Lock()
@@ -254,300 +255,10 @@ def compose_logs(service: str = "caddy") -> str:
     return out
 
 
-PAGE = r"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>镜像加速站控制台</title>
-  <style>
-    :root { --bg:#0b1220; --card:#121a2b; --line:#243049; --text:#e8eefc; --muted:#9aa8c7; --accent:#4cc2ff; --ok:#3dd68c; --bad:#ff6b7a; }
-    * { box-sizing:border-box; }
-    body { margin:0; font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:radial-gradient(900px 400px at 10% -10%,#1a3a66 0%,transparent 55%),var(--bg); color:var(--text); }
-    main { max-width:980px; margin:0 auto; padding:36px 18px 80px; }
-    h1 { margin:0 0 6px; letter-spacing:-.03em; }
-    .sub { color:var(--muted); margin-bottom:22px; }
-    .card { background:rgba(18,26,43,.9); border:1px solid var(--line); border-radius:16px; padding:18px 20px; margin-bottom:14px; }
-    label { display:block; font-size:13px; color:var(--muted); margin:10px 0 6px; }
-    input, select { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2a3a58; background:#0a1020; color:var(--text); }
-    .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-    .btns { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
-    button { border:0; border-radius:10px; padding:10px 14px; cursor:pointer; font-weight:600; }
-    .primary { background:#2b7cff; color:#fff; }
-    .ghost { background:#1a2438; color:var(--text); }
-    .danger { background:#5a2030; color:#ffd6dc; }
-    pre { background:#0a1020; border:1px solid #1d2942; border-radius:12px; padding:12px; overflow:auto; min-height:120px; white-space:pre-wrap; font-size:12px; }
-    .ok { color:var(--ok); } .bad { color:var(--bad); }
-    .pill { display:inline-block; background:#16324a; color:var(--accent); border-radius:999px; padding:2px 10px; font-size:12px; margin-bottom:10px; }
-    .check { display:flex; align-items:center; gap:8px; margin-top:12px; color:var(--muted); }
-    .check input { width:auto; }
-    @media (max-width:800px){ .row{grid-template-columns:1fr;} }
-  </style>
-</head>
-<body>
-<main>
-  <div class="pill">网页部署 · 不用记命令</div>
-  <h1>镜像加速站控制台</h1>
-  <p class="sub">填写域名后点「保存并部署」。脚本会探测 80/443：空闲就自己签证书，已被 Nginx/Caddy 占用就挂到现有反代后面。缓存永远只听本机 5080，不会和别的站点抢端口。</p>
-
-  <section class="card" id="login-card">
-    <h2>登录</h2>
-    <p class="sub">安装脚本结束时打印的面板密码，也在服务器文件 <code>/opt/docker-mirror/panel/.secret</code></p>
-    <label>面板密码</label>
-    <input id="token" type="password" autocomplete="current-password">
-    <div class="btns"><button class="primary" onclick="login()">进入面板</button></div>
-    <p id="login-msg" class="bad"></p>
-  </section>
-
-  <div id="app" style="display:none">
-    <section class="card">
-      <h2>部署参数</h2>
-      <div class="row">
-        <div>
-          <label>主域名（example.com，不要带 https）</label>
-          <input id="DOMAIN" placeholder="example.com">
-        </div>
-        <div>
-          <label>加速站主机名</label>
-          <input id="SITE_ADDRESS" placeholder="mirror.example.com">
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label>证书邮箱</label>
-          <input id="ACME_EMAIL" placeholder="admin@example.com">
-        </div>
-        <div>
-          <label>模式</label>
-          <select id="HTTP_ONLY">
-            <option value="false">HTTPS + 域名（推荐，美国服务器）</option>
-            <option value="true">仅 HTTP / 内网 IP</option>
-          </select>
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label>Docker Hub 用户名（建议填）</label>
-          <input id="DOCKERHUB_USERNAME">
-        </div>
-        <div>
-          <label>Docker Hub Token</label>
-          <input id="DOCKERHUB_PASSWORD" type="password" placeholder="已保存则留空不改">
-        </div>
-      </div>
-      <div class="row">
-        <div>
-          <label>HTTP 代理（一般不用）</label>
-          <input id="HTTP_PROXY" placeholder="http://127.0.0.1:7890">
-        </div>
-        <div>
-          <label>HTTPS 代理</label>
-          <input id="HTTPS_PROXY">
-        </div>
-      </div>
-      <label class="check"><input id="skip_dns" type="checkbox"> 跳过 DNS 检查（解析未生效时临时用，证书仍可能失败）</label>
-      <div class="btns">
-        <button class="primary" id="btn-deploy" onclick="deploy()">保存并部署</button>
-        <button class="ghost" onclick="saveOnly()">只保存</button>
-        <button class="ghost" onclick="checkDns()">检查 DNS</button>
-        <button class="ghost" onclick="health()">健康检查</button>
-        <button class="ghost" onclick="clientCfg()">国内怎么用</button>
-        <button class="ghost" onclick="refreshStatus()">刷新状态</button>
-        <button class="danger" onclick="restart()">重启服务</button>
-      </div>
-      <p id="flash" class="sub" style="margin:12px 0 0">点「保存并部署」后，进度会出现在这里和下面的任务日志。</p>
-    </section>
-
-    <section class="card">
-      <h2>容器状态</h2>
-      <pre id="status">(尚未加载)</pre>
-    </section>
-    <section class="card">
-      <h2>任务日志</h2>
-      <pre id="job">(空)</pre>
-    </section>
-    <section class="card">
-      <h2>Caddy 日志</h2>
-      <div class="btns">
-        <button class="ghost" onclick="logs('caddy')">caddy</button>
-        <button class="ghost" onclick="logs('registry-dockerhub')">dockerhub</button>
-      </div>
-      <pre id="logs">(空)</pre>
-    </section>
-  </div>
-</main>
-<script>
-let TOKEN = localStorage.getItem("mirror_panel_token") || "";
-const $ = (id) => document.getElementById(id);
-
-function setJob(text) {
-  const el = $("job");
-  if (el) el.textContent = text || "(空)";
-  const flash = $("flash");
-  if (flash) {
-    const first = (text || "").split("\n").filter(Boolean)[0] || "";
-    flash.textContent = first || "已更新任务日志，请往下看。";
-    flash.className = first.indexOf("失败") >= 0 || first.indexOf("错误") >= 0 ? "bad" : "ok";
-  }
-}
-
-async function api(path, opt={}) {
-  const headers = Object.assign({"Authorization": "Bearer " + TOKEN}, opt.headers || {});
-  let res;
-  try {
-    res = await fetch(path, Object.assign({}, opt, {headers}));
-  } catch (e) {
-    throw new Error("请求没发出去：" + e.message);
-  }
-  if (res.status === 401) throw new Error("密码错误或未登录，请刷新页面重新登录");
-  const text = await res.text();
-  try { return JSON.parse(text); } catch { return {raw: text, status: res.status}; }
-}
-
-function login() {
-  TOKEN = $("token").value.trim();
-  localStorage.setItem("mirror_panel_token", TOKEN);
-  boot();
-}
-
-async function boot() {
-  try {
-    const cfg = await api("/api/config");
-    $("login-card").style.display = "none";
-    $("app").style.display = "block";
-    for (const k of ["DOMAIN","SITE_ADDRESS","ACME_EMAIL","HTTP_ONLY","DOCKERHUB_USERNAME","HTTP_PROXY","HTTPS_PROXY"]) {
-      if (cfg[k] !== undefined) $(k).value = cfg[k];
-    }
-    $("DOCKERHUB_PASSWORD").placeholder = cfg.DOCKERHUB_PASSWORD_SET ? "已保存，留空不改" : "建议填写 Access Token";
-    refreshStatus();
-    pollJob();
-  } catch (e) {
-    $("login-msg").textContent = e.message;
-    $("login-card").style.display = "block";
-    $("app").style.display = "none";
-  }
-}
-
-function formPayload() {
-  const data = {
-    DOMAIN: $("DOMAIN").value.trim(),
-    SITE_ADDRESS: $("SITE_ADDRESS").value.trim(),
-    ACME_EMAIL: $("ACME_EMAIL").value.trim(),
-    HTTP_ONLY: $("HTTP_ONLY").value,
-    DOCKERHUB_USERNAME: $("DOCKERHUB_USERNAME").value.trim(),
-    HTTP_PROXY: $("HTTP_PROXY").value.trim(),
-    HTTPS_PROXY: $("HTTPS_PROXY").value.trim(),
-    skip_dns: $("skip_dns").checked,
-  };
-  const pwd = $("DOCKERHUB_PASSWORD").value.trim();
-  if (pwd) data.DOCKERHUB_PASSWORD = pwd;
-  if (data.DOMAIN && !data.SITE_ADDRESS) data.SITE_ADDRESS = "mirror." + data.DOMAIN;
-  return data;
-}
-
-async function saveOnly() {
-  try {
-    const r = await api("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(formPayload())});
-    setJob(r.ok ? "已保存配置，还没有部署。" : (r.error || "保存失败"));
-  } catch (e) {
-    setJob("保存失败：" + e.message);
-  }
-}
-
-async function deploy() {
-  const btn = $("btn-deploy");
-  if (btn) btn.disabled = true;
-  setJob("正在提交部署任务，请稍候...");
-  try {
-    const r = await api("/api/deploy", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(formPayload())});
-    if (r.error) { setJob("部署没有开始：" + r.error); return; }
-    setJob("任务已提交，正在拉取镜像并申请证书...");
-    pollJob();
-  } catch (e) {
-    setJob("部署失败：" + e.message);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-async function pollJob() {
-  try {
-    const r = await api("/api/job");
-    setJob(r.log || "任务已提交，等待日志...");
-    if (r.running) setTimeout(pollJob, 1500);
-    else refreshStatus();
-  } catch (e) {
-    setJob("读取任务日志失败：" + e.message);
-  }
-}
-
-async function checkDns() {
-  try {
-    await saveOnly();
-    setJob("正在检查 DNS...");
-    const r = await api("/api/dns");
-    setJob(r.output || r.error || "DNS 检查无输出");
-  } catch (e) {
-    setJob("DNS 检查失败：" + e.message);
-  }
-}
-async function health() {
-  try {
-    setJob("正在做健康检查...");
-    const r = await api("/api/health");
-    setJob(r.output || r.error || "健康检查无输出");
-  } catch (e) {
-    setJob("健康检查失败：" + e.message);
-  }
-}
-async function clientCfg() {
-  try {
-    const r = await api("/api/client");
-    setJob(r.output || r.error || "无输出");
-  } catch (e) {
-    setJob("读取客户端配置失败：" + e.message);
-  }
-}
-async function refreshStatus() {
-  try {
-    const r = await api("/api/status");
-    $("status").textContent = r.output || r.error || "(空)";
-  } catch (e) {
-    $("status").textContent = "读取状态失败：" + e.message;
-  }
-}
-async function logs(svc) {
-  try {
-    const r = await api("/api/logs?service=" + encodeURIComponent(svc || "caddy"));
-    $("logs").textContent = r.output || r.error;
-  } catch (e) {
-    $("logs").textContent = "读日志失败：" + e.message;
-  }
-}
-async function restart() {
-  if (!confirm("确定重启加速站容器？")) return;
-  try {
-    const r = await api("/api/restart", {method:"POST"});
-    setJob(r.output || r.error || "已发送重启");
-    refreshStatus();
-  } catch (e) {
-    setJob("重启失败：" + e.message);
-  }
-}
-
-const domainEl = $("DOMAIN");
-if (domainEl) {
-  domainEl.addEventListener("blur", () => {
-    const d = $("DOMAIN").value.trim().replace(/^https?:\/\//,"").replace(/\/$/,"");
-    if (d && !$("SITE_ADDRESS").value.trim()) $("SITE_ADDRESS").value = "mirror." + d.replace(/^mirror\./,"");
-  });
-}
-
-if (TOKEN) boot();
-</script>
-</body>
-</html>
-"""
+def load_page() -> str:
+    if PAGE_FILE.is_file():
+        return PAGE_FILE.read_text(encoding="utf-8")
+    return "<!DOCTYPE html><title>missing panel/index.html</title>"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -602,7 +313,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path)
         if path.path == "/":
-            self._html(PAGE)
+            self._html(load_page())
             return
         if path.path == "/healthz":
             self._json(200, {"ok": True})
@@ -621,6 +332,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200 if code == 0 else 400, {"ok": code == 0, "output": out})
         elif path.path == "/api/health":
             code, out = run_cmd(["sh", "scripts/healthcheck.sh"], timeout=120)
+            self._json(200 if code == 0 else 400, {"ok": code == 0, "output": out})
+        elif path.path == "/api/cert":
+            code, out = run_cmd(["sh", "scripts/cert-status.sh"], timeout=40)
             self._json(200 if code == 0 else 400, {"ok": code == 0, "output": out})
         elif path.path == "/api/client":
             _, out = run_cmd(["sh", "scripts/print-client-config.sh"], timeout=20)

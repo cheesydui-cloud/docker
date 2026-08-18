@@ -28,7 +28,9 @@ for f in \
   scripts/upgrade.sh \
   scripts/render-edge.sh \
   scripts/nginx-disarm-servername.py \
+  scripts/cert-status.sh \
   panel/app.py \
+  panel/index.html \
   panel/docker-mirror-panel.service \
   www/install.sh \
   examples/daemon.json.https
@@ -81,6 +83,22 @@ else
 fi
 if grep -q 'https://mirror.example.test' www/index.html; then ok "首页加速地址"; else fail "首页未写入加速地址"; fi
 if grep -q 'ghcr.example.test' www/index.html; then ok "首页 ghcr 前缀"; else fail "首页未写入 ghcr 前缀"; fi
+if grep -q 'data-copy' www/index.html; then ok "首页可复制加速地址"; else fail "首页缺少复制按钮"; fi
+if grep -q '/api/cert' panel/index.html && grep -q '操作结果' panel/index.html; then
+  ok "控制台含证书卡片和结果区"
+else
+  fail "控制台缺少证书或结果区"
+fi
+if grep -q 'self._html(load_page())' panel/app.py && grep -q '/api/cert' panel/app.py; then
+  ok "面板从 index.html 读取并提供 /api/cert"
+else
+  fail "面板未接线 load_page /api/cert"
+fi
+if grep -q 'kv cert_ok' scripts/cert-status.sh; then
+  ok "cert-status.sh 输出 cert_ok"
+else
+  fail "cert-status.sh 缺少 cert_ok"
+fi
 
 echo
 echo "== docker-compose 结构 =="

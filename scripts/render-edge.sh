@@ -15,9 +15,6 @@ SITE_ADDRESS="${SITE_ADDRESS:-:80}"
 DOMAIN="${DOMAIN:-}"
 PANEL_ADDRESS="${PANEL_ADDRESS:-}"
 PANEL_PORT="${PANEL_PORT:-8088}"
-if [ -z "$PANEL_ADDRESS" ] && [ -n "$DOMAIN" ] && [ "$DOMAIN" != "example.com" ]; then
-  PANEL_ADDRESS="panel.${DOMAIN}"
-fi
 
 mkdir -p "$ROOT/caddy"
 

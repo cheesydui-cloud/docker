@@ -58,10 +58,6 @@ if [ -f "$ROOT/.env" ]; then
   set +a
   panel_host="${PANEL_ADDRESS:-}"
 fi
-if [ -z "$panel_host" ] && [ -n "${DOMAIN:-}" ] && [ "$DOMAIN" != "example.com" ]; then
-  panel_host="panel.${DOMAIN}"
-fi
-
 echo
 echo "打开控制台： http://${ip:-<服务器IP>}:${PORT}/"
 if [ -n "$panel_host" ]; then

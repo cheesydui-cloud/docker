@@ -17,14 +17,13 @@ HTTP_PORT="${HTTP_PORT:-5080}"
 EDGE_MODE="${EDGE_MODE:-}"
 PANEL_ADDRESS="${PANEL_ADDRESS:-}"
 PANEL_PORT="${PANEL_PORT:-8088}"
-if [ -z "$PANEL_ADDRESS" ] && [ -n "${DOMAIN:-}" ] && [ "$DOMAIN" != "example.com" ]; then
-  PANEL_ADDRESS="panel.${DOMAIN}"
-fi
+EDGE_PREFERENCE="${EDGE_PREFERENCE:-auto}"
 
 kv() { printf '%s=%s\n' "$1" "$2"; }
 
 kv site "$SITE_ADDRESS"
 kv edge_mode "$EDGE_MODE"
+kv edge_preference "$EDGE_PREFERENCE"
 kv backend_port "$HTTP_PORT"
 kv panel "$PANEL_ADDRESS"
 kv panel_port "$PANEL_PORT"

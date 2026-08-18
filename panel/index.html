@@ -4,102 +4,107 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>镜像加速站控制台</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
-    :root {
-      --bg:#0b1220; --card:rgba(17,24,39,.82); --line:rgba(148,163,184,.16);
-      --text:#f8fafc; --muted:#94a3b8; --accent:#38bdf8; --ok:#34d399;
-      --bad:#f87171; --warn:#fbbf24; --ease:cubic-bezier(.16,1,.3,1);
-    }
-    * { box-sizing:border-box; }
+    * { box-sizing: border-box; }
     body {
-      margin:0; min-height:100dvh; color:var(--text);
-      font-family:Inter,ui-sans-serif,system-ui,sans-serif;
-      background:
-        radial-gradient(900px 400px at 8% -10%, rgba(56,189,248,.16), transparent 55%),
-        radial-gradient(700px 360px at 100% 0%, rgba(52,211,153,.08), transparent 50%),
-        var(--bg);
+      margin: 0;
+      background: #f4f4f5;
+      color: #111;
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
     }
-    main { width:min(1080px, calc(100% - 28px)); margin:0 auto; padding:28px 0 80px; }
-    h1 { margin:0 0 6px; letter-spacing:-.04em; font-size:32px; }
-    h2 { margin:0 0 10px; font-size:17px; letter-spacing:-.02em; }
-    .sub { color:var(--muted); margin:0 0 18px; }
+    main { max-width: 920px; margin: 0 auto; padding: 24px 16px 64px; }
+    h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
+    h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+    .sub { margin: 0 0 16px; color: #555; }
     .card {
-      background:var(--card); border:1px solid var(--line); border-radius:20px;
-      padding:20px; margin-bottom:14px; backdrop-filter:blur(16px);
+      background: #fff;
+      border: 1px solid #ddd;
+      padding: 16px 18px;
+      margin-bottom: 12px;
     }
-    label { display:block; font-size:13px; color:var(--muted); margin:10px 0 6px; }
+    .top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+    label { display: block; margin: 10px 0 4px; color: #333; }
     input, select {
-      width:100%; padding:11px 12px; border-radius:12px;
-      border:1px solid #243049; background:#070b14; color:var(--text); font:500 14px Inter,sans-serif;
+      width: 100%;
+      height: 36px;
+      padding: 0 8px;
+      border: 1px solid #ccc;
+      background: #fff;
+      color: #111;
+      font: inherit;
     }
-    input:focus, select:focus { outline:2px solid var(--accent); outline-offset:2px; }
-    .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-    .metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
-    .metric { padding:14px; border-radius:16px; border:1px solid var(--line); background:#070b14; }
-    .metric b { display:block; font-size:13px; color:var(--muted); font-weight:500; margin-bottom:6px; }
-    .metric span { font-size:15px; font-weight:600; word-break:break-all; }
-    .btns { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+    input:focus, select:focus { outline: 1px solid #111; border-color: #111; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .metric { border: 1px solid #ddd; background: #fafafa; padding: 10px; }
+    .metric b { display: block; color: #666; font-weight: 500; margin-bottom: 4px; }
+    .metric span { word-break: break-all; }
+    .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
     button {
-      border:0; border-radius:12px; padding:11px 14px; cursor:pointer;
-      font:600 13px Inter,sans-serif; min-height:44px;
-      transition:transform .16s var(--ease), opacity .16s var(--ease);
+      height: 34px;
+      padding: 0 12px;
+      border: 1px solid #bbb;
+      background: #fff;
+      color: #111;
+      font: inherit;
+      cursor: pointer;
     }
-    button:hover { transform:translateY(-1px); }
-    button:disabled { opacity:.55; cursor:not-allowed; transform:none; }
-    .primary { background:#e2e8f0; color:#0f172a; }
-    .ghost { background:#152033; color:var(--text); border:1px solid var(--line); }
-    .danger { background:#3f1d27; color:#fecdd3; }
+    button:hover { background: #f0f0f0; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .primary { background: #111; color: #fff; border-color: #111; }
+    .primary:hover { background: #333; }
+    .danger { color: #a40000; border-color: #c9a0a0; }
     pre {
-      background:#070b14; border:1px solid #1e293b; border-radius:14px;
-      padding:12px; overflow:auto; min-height:140px; white-space:pre-wrap;
-      font:12px/1.55 "JetBrains Mono",ui-monospace,Menlo,monospace; color:#dbeafe;
+      margin: 0;
+      background: #f7f7f7;
+      border: 1px solid #ddd;
+      padding: 10px;
+      overflow: auto;
+      min-height: 120px;
+      white-space: pre-wrap;
+      font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
-    .ok { color:var(--ok); } .bad { color:var(--bad); } .warn { color:var(--warn); }
-    .pill { display:inline-flex; align-items:center; gap:8px; background:#16324a; color:var(--accent); border-radius:999px; padding:4px 10px; font-size:12px; margin-bottom:10px; }
-    .check { display:flex; align-items:center; gap:8px; margin-top:12px; color:var(--muted); }
-    .check input { width:auto; }
-    .top { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; flex-wrap:wrap; }
-    @media (max-width:860px){ .row,.metrics{grid-template-columns:1fr;} }
-    @media (prefers-reduced-motion:reduce){ *{transition:none!important;} }
+    .ok { color: #0a7a2f; }
+    .bad { color: #b42318; }
+    .warn { color: #8a5a00; }
+    .check { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: #444; }
+    .check input { width: auto; height: auto; }
+    @media (max-width: 800px) { .row, .metrics { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
 <main>
-  <div class="pill">管理后台 · 只给你自己用 · 不要把 :8088 当加速地址</div>
   <div class="top">
     <div>
       <h1>镜像加速站控制台</h1>
-      <p class="sub">改域名、看证书、部署。群晖填加速站主机名。浏览器打开加速站没有网页是正常的，那是纯 Registry。</p>
+      <p class="sub">域名、证书邮箱、接入方式都在这里填。群晖填加速站主机名，不要填这个控制台地址。</p>
     </div>
-    <button class="ghost" type="button" id="btn-logout" onclick="logout()" style="display:none">退出登录</button>
+    <button type="button" id="btn-logout" onclick="logout()" style="display:none">退出</button>
   </div>
 
   <section class="card" id="login-card">
     <h2>登录</h2>
-    <p class="sub">密码在安装结束时打印，也在 <code>/opt/docker-mirror/panel/.secret</code></p>
+    <p class="sub">密码在安装结束时打印，文件在安装目录 <code>panel/.secret</code></p>
     <label for="token">面板密码</label>
     <input id="token" type="password" autocomplete="current-password">
-    <div class="btns"><button class="primary" type="button" onclick="login()">进入面板</button></div>
+    <div class="btns"><button class="primary" type="button" onclick="login()">登录</button></div>
     <p id="login-msg" class="bad"></p>
   </section>
 
   <div id="app" style="display:none">
     <section class="card">
       <h2>运行状态</h2>
-      <p class="sub" id="cert-hint">正在读取证书和后端…</p>
+      <p class="sub" id="cert-hint">正在读取状态…</p>
       <div class="metrics">
         <div class="metric"><b>加速站</b><span id="m-site">—</span></div>
         <div class="metric"><b>证书</b><span id="m-cert">—</span></div>
         <div class="metric"><b>控制台</b><span id="m-panel">—</span></div>
       </div>
-      <p class="sub" id="edge-hint" style="margin-top:10px"></p>
+      <p class="sub" id="edge-hint" style="margin:10px 0 0"></p>
       <div class="btns">
-        <button class="ghost" type="button" onclick="refreshOverview()">刷新状态</button>
-        <button class="ghost" type="button" id="btn-open-site">打开加速站</button>
-        <button class="ghost" type="button" onclick="copyMirror()">复制加速地址</button>
+        <button type="button" onclick="refreshOverview()">刷新状态</button>
+        <button type="button" id="btn-open-site">打开加速站</button>
+        <button type="button" onclick="copyMirror()">复制加速地址</button>
       </div>
     </section>
 
@@ -107,57 +112,66 @@
       <h2>部署参数</h2>
       <div class="row">
         <div>
-          <label for="DOMAIN">主域名（不要带 https）</label>
-          <input id="DOMAIN" placeholder="example.com">
+          <label for="DOMAIN">主域名</label>
+          <input id="DOMAIN" placeholder="example.com" autocomplete="off">
         </div>
         <div>
           <label for="SITE_ADDRESS">加速站主机名</label>
-          <input id="SITE_ADDRESS" placeholder="docker.example.com">
+          <input id="SITE_ADDRESS" placeholder="docker.example.com" autocomplete="off">
         </div>
       </div>
       <div class="row">
         <div>
-          <label for="PANEL_ADDRESS">控制台域名</label>
-          <input id="PANEL_ADDRESS" placeholder="panel.example.com">
+          <label for="PANEL_ADDRESS">控制台域名（可选）</label>
+          <input id="PANEL_ADDRESS" placeholder="panel.example.com" autocomplete="off">
         </div>
         <div>
           <label for="ACME_EMAIL">证书邮箱</label>
-          <input id="ACME_EMAIL" placeholder="admin@example.com">
+          <input id="ACME_EMAIL" placeholder="admin@example.com" autocomplete="off">
         </div>
       </div>
       <div class="row">
+        <div>
+          <label for="EDGE_PREFERENCE">边缘接入</label>
+          <select id="EDGE_PREFERENCE">
+            <option value="auto">自动：按 80/443 占用选择</option>
+            <option value="behind-nginx">Nginx（本机已有 Nginx / 3x-ui）</option>
+            <option value="behind-caddy">Caddy（本机已有宿主机 Caddy）</option>
+            <option value="direct">直连（本机 80/443 空闲，用 edge 签证书）</option>
+          </select>
+        </div>
         <div>
           <label for="DOCKERHUB_USERNAME">Docker Hub 用户名</label>
-          <input id="DOCKERHUB_USERNAME">
-        </div>
-        <div>
-          <label for="DOCKERHUB_PASSWORD">Docker Hub Token</label>
-          <input id="DOCKERHUB_PASSWORD" type="password" placeholder="已保存则留空不改">
+          <input id="DOCKERHUB_USERNAME" autocomplete="off">
         </div>
       </div>
       <div class="row">
         <div>
+          <label for="DOCKERHUB_PASSWORD">Docker Hub Token</label>
+          <input id="DOCKERHUB_PASSWORD" type="password" placeholder="已保存则留空不改" autocomplete="off">
+        </div>
+        <div>
           <label for="HTTP_PROXY">HTTP 代理（一般不用）</label>
-          <input id="HTTP_PROXY" placeholder="留空">
+          <input id="HTTP_PROXY" placeholder="留空" autocomplete="off">
         </div>
       </div>
       <input id="HTTPS_PROXY" type="hidden">
       <input id="HTTP_ONLY" type="hidden" value="true">
-      <label class="check"><input id="skip_dns" type="checkbox"> 跳过 DNS 检查（解析未生效时临时用）</label>
+      <label class="check"><input id="skip_dns" type="checkbox"> 跳过 DNS 检查</label>
       <div class="btns">
         <button class="primary" id="btn-deploy" type="button" onclick="deploy()">保存并部署</button>
-        <button class="ghost" type="button" onclick="saveOnly()">只保存</button>
-        <button class="ghost" type="button" onclick="checkDns()">检查 DNS</button>
-        <button class="ghost" type="button" onclick="health()">健康检查</button>
-        <button class="ghost" type="button" onclick="clientCfg()">国内怎么用</button>
+        <button type="button" onclick="saveOnly()">只保存</button>
+        <button type="button" onclick="checkDns()">检查 DNS</button>
+        <button type="button" onclick="health()">健康检查</button>
+        <button type="button" onclick="clientCfg()">国内怎么用</button>
         <button class="danger" type="button" onclick="restart()">重启服务</button>
       </div>
-      <p id="flash" class="sub" style="margin:14px 0 0">点按钮后，结果会出现在下面「操作结果」。</p>
+      <p id="flash" class="sub" style="margin:12px 0 0">点按钮后，结果出现在下面「操作结果」。</p>
     </section>
 
     <section class="card" id="result-card">
       <h2>操作结果</h2>
-      <pre id="job">还没有操作。点「健康检查」或「国内怎么用」看这里。</pre>
+      <pre id="job">还没有操作。</pre>
     </section>
     <section class="card">
       <h2>容器状态</h2>
@@ -166,9 +180,9 @@
     <section class="card">
       <h2>服务日志</h2>
       <div class="btns">
-        <button class="ghost" type="button" onclick="logs('caddy')">内部路由</button>
-        <button class="ghost" type="button" onclick="logs('edge')">边缘证书</button>
-        <button class="ghost" type="button" onclick="logs('registry-dockerhub')">dockerhub</button>
+        <button type="button" onclick="logs('caddy')">内部路由</button>
+        <button type="button" onclick="logs('edge')">边缘证书</button>
+        <button type="button" onclick="logs('registry-dockerhub')">dockerhub</button>
       </div>
       <pre id="logs">(空)</pre>
     </section>
@@ -185,10 +199,10 @@ function showResult(text, kind) {
   if (flash) {
     const first = (text || "").split("\n").filter(Boolean)[0] || "已更新结果";
     flash.textContent = first;
-    flash.className = kind || ( /失败|错误|ERROR|FAIL/.test(first) ? "bad" : "ok");
+    flash.className = kind || (/失败|错误|ERROR|FAIL/.test(first) ? "bad" : "ok");
   }
   const card = $("result-card");
-  if (card) card.scrollIntoView({behavior:"smooth", block:"start"});
+  if (card) card.scrollIntoView({behavior: "smooth", block: "start"});
 }
 
 async function api(path, opt={}) {
@@ -196,7 +210,7 @@ async function api(path, opt={}) {
   let res;
   try { res = await fetch(path, Object.assign({}, opt, {headers})); }
   catch (e) { throw new Error("请求没发出去：" + e.message); }
-  if (res.status === 401) throw new Error("密码错误或未登录，请刷新页面重新登录");
+  if (res.status === 401) throw new Error("密码错误或未登录");
   const text = await res.text();
   try { return JSON.parse(text); } catch { return {raw: text, status: res.status}; }
 }
@@ -217,8 +231,8 @@ async function boot() {
     const cfg = await api("/api/config");
     $("login-card").style.display = "none";
     $("app").style.display = "block";
-    $("btn-logout").style.display = "inline-flex";
-    for (const k of ["DOMAIN","SITE_ADDRESS","PANEL_ADDRESS","ACME_EMAIL","DOCKERHUB_USERNAME","HTTP_PROXY"]) {
+    $("btn-logout").style.display = "inline-block";
+    for (const k of ["DOMAIN","SITE_ADDRESS","PANEL_ADDRESS","ACME_EMAIL","DOCKERHUB_USERNAME","HTTP_PROXY","EDGE_PREFERENCE"]) {
       if (cfg[k] !== undefined && $(k)) $(k).value = cfg[k];
     }
     $("DOCKERHUB_PASSWORD").placeholder = cfg.DOCKERHUB_PASSWORD_SET ? "已保存，留空不改" : "建议填写 Access Token";
@@ -237,6 +251,7 @@ function formPayload() {
     SITE_ADDRESS: $("SITE_ADDRESS").value.trim(),
     PANEL_ADDRESS: $("PANEL_ADDRESS") ? $("PANEL_ADDRESS").value.trim() : "",
     ACME_EMAIL: $("ACME_EMAIL").value.trim(),
+    EDGE_PREFERENCE: $("EDGE_PREFERENCE") ? $("EDGE_PREFERENCE").value : "auto",
     HTTP_ONLY: "true",
     DOCKERHUB_USERNAME: $("DOCKERHUB_USERNAME").value.trim(),
     HTTP_PROXY: $("HTTP_PROXY").value.trim(),
@@ -245,7 +260,6 @@ function formPayload() {
   };
   const pwd = $("DOCKERHUB_PASSWORD").value.trim();
   if (pwd) data.DOCKERHUB_PASSWORD = pwd;
-  if (data.DOMAIN && !data.SITE_ADDRESS) data.SITE_ADDRESS = "docker." + data.DOMAIN.replace(/^mirror\./,"");
   return data;
 }
 
@@ -270,13 +284,14 @@ async function refreshOverview() {
     const kv = parseKv(r.output || "");
     $("m-site").textContent = kv.site || $("SITE_ADDRESS").value || "未设置";
     const edge = kv.edge_mode || "未探测";
+    const pref = kv.edge_preference || ($("EDGE_PREFERENCE") && $("EDGE_PREFERENCE").value) || "auto";
     const edgeText = ({
-      "behind-nginx":"挂在现有 Nginx 后面",
-      "behind-caddy":"挂在现有 Caddy 后面",
-      "direct":"本机 80/443 空闲，自己签证书",
-      "behind-unknown":"80 被其它进程占用"
+      "behind-nginx": "Nginx",
+      "behind-caddy": "Caddy",
+      "direct": "直连 edge",
+      "behind-unknown": "80 被其它进程占用"
     })[edge] || edge;
-    if ($("edge-hint")) $("edge-hint").textContent = "接入方式：" + edgeText;
+    if ($("edge-hint")) $("edge-hint").textContent = "当前接入：" + edgeText + "（面板选择：" + pref + "）";
     const panelHost = kv.panel || ($("PANEL_ADDRESS") && $("PANEL_ADDRESS").value) || "";
     if (kv.panel_https === "ok") {
       $("m-panel").textContent = "https://" + panelHost;
@@ -284,13 +299,13 @@ async function refreshOverview() {
     } else if (panelHost) {
       $("m-panel").textContent = panelHost + "（DNS 指过来后自动签证书）";
     } else {
-      $("m-panel").textContent = "http://IP:8088";
+      $("m-panel").textContent = "未设置，使用 IP:端口";
     }
     let certText = "还没探测到";
     let hint = "";
     if (kv.cert_ok === "yes") {
       certText = "Let's Encrypt 已生效";
-      hint = "公网 https://" + (kv.site||"") + " 证书正常。浏览器地址栏如果还写「不安全」，多半是你在看这个 HTTP 面板（:8088），不是加速站域名。";
+      hint = "加速站 https://" + (kv.site || "") + " 证书正常。控制台如果走 IP:端口，浏览器写不安全是正常的。";
       $("m-cert").className = "ok";
     } else if (kv.public_https === "ok") {
       certText = kv.cert_issuer || "已能打开 HTTPS";
@@ -298,11 +313,11 @@ async function refreshOverview() {
       $("m-cert").className = "ok";
     } else if (kv.public_https === "redirect") {
       certText = "还在跳转";
-      hint = "公网在 301/308。Cloudflare 必须灰云。";
+      hint = "公网在 301/308。Cloudflare 必须关闭代理（灰云）。";
       $("m-cert").className = "warn";
     } else {
       certText = "未生效";
-      hint = "点「保存并部署」会重新申请。管理面板本身是 http://IP:8088，Chrome 显示不安全是正常的。";
+      hint = "先填加速站主机名，再点保存并部署。";
       $("m-cert").className = "bad";
     }
     if (kv.cert_not_after) certText += " · 到期 " + kv.cert_not_after;
@@ -321,14 +336,14 @@ function copyMirror() {
   const site = $("SITE_ADDRESS").value.trim();
   if (!site) { showResult("先填加速站主机名", "bad"); return; }
   const url = "https://" + site;
-  navigator.clipboard.writeText(url).then(() => showResult("已复制 " + url + "\n群晖填这个，不要填 :8088。", "ok"))
+  navigator.clipboard.writeText(url).then(() => showResult("已复制 " + url, "ok"))
     .catch(() => showResult(url, "ok"));
 }
 
 async function saveOnly() {
   try {
     const r = await api("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(formPayload())});
-    showResult(r.ok ? "已保存，还没有部署。改完域名后要点「保存并部署」。" : (r.error || "保存失败"), r.ok ? "ok" : "bad");
+    showResult(r.ok ? "已保存，还没有部署。" : (r.error || "保存失败"), r.ok ? "ok" : "bad");
   } catch (e) { showResult("保存失败：" + e.message, "bad"); }
 }
 
@@ -391,14 +406,6 @@ async function restart() {
   } catch (e) { showResult("重启失败：" + e.message, "bad"); }
 }
 
-const domainEl = $("DOMAIN");
-if (domainEl) {
-  domainEl.addEventListener("blur", () => {
-    const d = $("DOMAIN").value.trim().replace(/^https?:\/\//,"").replace(/\/$/,"");
-    if (d && !$("SITE_ADDRESS").value.trim()) $("SITE_ADDRESS").value = "docker." + d.replace(/^mirror\./,"");
-    if (d && $("PANEL_ADDRESS") && !$("PANEL_ADDRESS").value.trim()) $("PANEL_ADDRESS").value = "panel." + d.replace(/^mirror\./,"");
-  });
-}
 if (TOKEN) boot();
 </script>
 </body>

@@ -53,17 +53,18 @@ curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install
 
 1. 浏览器打开 `http://美国服务器IP:8088/`（或 DNS 生效后的 `https://panel.你的域名`）
 2. 用终端打印的**面板密码**登录（也在 `/opt/docker-mirror/panel/.secret`）
-3. 填写主域名、证书邮箱、Docker Hub Token
-4. 点 **保存并部署**
+3. 填写主域名、加速站主机名、证书邮箱、Docker Hub Token
+4. 边缘接入可选：自动 / Nginx / Caddy / 直连
+5. 点 **保存并部署**
 
-安全组额外放行 **TCP 8088**（建议只给你自己的 IP）。`panel` 解析指到本机后，部署会自动给后台签证书。域名、证书、重启、日志都在这个页面完成。
+安全组额外放行 **TCP 8088**（建议只给你自己的 IP）。控制台域名在面板里填，填了且 DNS 指到本机才会签证书。域名不会写死在代码里。
 
-`http://IP:8088` 本身没有 HTTPS，Chrome 写「不安全」是正常的。后台域名是 `https://panel.你的域名`。群晖填 `https://docker.你的域名`，不要填面板地址。
+`http://IP:8088` 本身没有 HTTPS，Chrome 写「不安全」是正常的。群晖填你在面板里写的加速站主机名，不要填控制台地址。
 
-### 任意机器怎么选边缘（不用你判断）
+### 任意机器怎么选边缘
 
 缓存永远只听本机 `127.0.0.1:5080`，**内部不再签证书、不做 301**。  
-80/443 由脚本探测后再选一种边缘：
+面板选「自动」时按 80/443 占用决定；也可以强制 Nginx 或 Caddy：
 
 | 这台机器的 80/443 | 自动做什么 |
 | --- | --- |
@@ -74,7 +75,7 @@ curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install
 
 空闲机器和占用机器用同一套安装命令。换一台机器再跑一遍即可，不用改参数。
 
-群晖 / 国内 Docker 仍填 `https://docker.你的域名`。浏览器打开这个地址**没有网页**是正常的，它只给 Docker 拉镜像。说明页在 `https://panel.你的域名`。
+群晖 / 国内 Docker 填面板里的加速站主机名。浏览器打开这个地址**没有网页**是正常的，它只给 Docker 拉镜像。说明和登录在控制台。
 
 打开域名如果是 **另一个面板** 或浏览器报 `ERR_TOO_MANY_REDIRECTS`：跑升级命令。新版本 HTTP 不再 301 回自己，也不会让内部 Caddy 再跳 HTTPS。
 

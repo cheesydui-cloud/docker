@@ -58,11 +58,13 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 cp -R . "$TMP/src"
 cd "$TMP/src"
-cat > .env <<'EOF'
+	cat > .env <<'EOF'
 SITE_ADDRESS=mirror.example.test
 DOMAIN=example.test
 ACME_EMAIL=admin@example.test
 HTTP_ONLY=true
+PANEL_ADDRESS=panel.example.test
+EDGE_PREFERENCE=auto
 EOF
 sh scripts/render-caddyfile.sh >/dev/null
 sh scripts/render-edge.sh >/dev/null
@@ -111,6 +113,21 @@ if grep -q 'kv cert_ok' scripts/cert-status.sh; then
   ok "cert-status.sh 输出 cert_ok"
 else
   fail "cert-status.sh 缺少 cert_ok"
+fi
+if grep -q 'id="EDGE_PREFERENCE"' panel/index.html && grep -q 'behind-nginx' panel/index.html && grep -q 'behind-caddy' panel/index.html; then
+  ok "控制台可选 Nginx / Caddy / 直连"
+else
+  fail "控制台缺少边缘接入选择"
+fi
+if grep -q 'EDGE_PREFERENCE' panel/app.py && grep -q 'EDGE_PREFERENCE' scripts/adapt-host.sh; then
+  ok "面板选择会写入 EDGE_PREFERENCE"
+else
+  fail "EDGE_PREFERENCE 未贯通"
+fi
+if grep -R -n 'nodelink.uk' --include='*.sh' --include='*.py' --include='*.yml' --include='*.html' --include='*.md' --include='*.example' --include='*.conf' --include='*.caddyfile' . | grep -v './.git/' | grep -v './scripts/verify-local.sh'; then
+  fail "代码里仍有写死的 nodelink.uk"
+else
+  ok "业务代码未写死 nodelink.uk"
 fi
 
 echo
@@ -167,6 +184,14 @@ if grep -q 'behind-nginx' scripts/adapt-host.sh && grep -q 'behind-caddy' script
 else
   fail "adapt-host 分支不完整"
 fi
+DET_PREF="$(mktemp)"
+if EDGE_PREFERENCE=nginx sh scripts/adapt-host.sh detect >"$DET_PREF" && grep -q "MODE='behind-nginx'" "$DET_PREF"; then
+  ok "EDGE_PREFERENCE=nginx 强制 behind-nginx"
+else
+  fail "面板指定 Nginx 未生效"
+  sed -n '1,8p' "$DET_PREF" || true
+fi
+rm -f "$DET_PREF"
 
 # 回归：探测结果里的括号不能把 sh source 弄挂（v1.0.3 线上故障）
 STATE_TMP="$(mktemp)"
@@ -245,10 +270,10 @@ server {
     server_name docker.example.test d-ui.example.test;
 }
 EOF
-cat > "$DISARM_NGINX" <<EOF
-# configuration file $DISARM_IN:
-$(cat "$DISARM_IN")
-EOF
+	{
+	  printf '# configuration file %s:\n' "$DISARM_IN"
+	  cat "$DISARM_IN"
+	} > "$DISARM_NGINX"
 if python3 scripts/nginx-disarm-servername.py docker.example.test /tmp/docker-mirror.conf "$DISARM_NGINX" >/dev/null; then
   if grep -q 'docker.example.test.disabled-by-docker-mirror' "$DISARM_IN" && grep -q 'd-ui.example.test' "$DISARM_IN"; then
     ok "冲突 server_name 会被改名，其它主机名保留"

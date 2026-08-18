@@ -2,7 +2,7 @@
 # 证书仍由现有 Caddy 签，镜像站只听 127.0.0.1:5080。
 # 不要再让内部 Caddy 签同一张证书。
 
-docker.nodelink.uk {
+YOUR_MIRROR_HOST {
 	reverse_proxy 127.0.0.1:5080 {
 		flush_interval -1
 		header_up X-Forwarded-Proto {scheme}

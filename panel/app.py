@@ -40,6 +40,7 @@ ENV_KEYS = [
     "EDGE_MODE",
     "PANEL_ADDRESS",
     "PANEL_PORT",
+    "EDGE_PREFERENCE",
 ]
 
 
@@ -63,9 +64,9 @@ TOKEN = ensure_secret()
 
 def load_env() -> dict:
     data = {
-        "SITE_ADDRESS": "mirror.example.com",
-        "DOMAIN": "example.com",
-        "ACME_EMAIL": "admin@example.com",
+        "SITE_ADDRESS": "",
+        "DOMAIN": "",
+        "ACME_EMAIL": "",
         "HTTP_ONLY": "false",
         "DOCKERHUB_USERNAME": "",
         "DOCKERHUB_PASSWORD": "",
@@ -80,6 +81,7 @@ def load_env() -> dict:
         "EDGE_MODE": "",
         "PANEL_ADDRESS": "",
         "PANEL_PORT": str(PORT),
+        "EDGE_PREFERENCE": "auto",
     }
     if not ENV_FILE.exists():
         return data
@@ -100,16 +102,25 @@ def write_env(values: dict) -> None:
     for key in ENV_KEYS:
         if key in values and values[key] is not None:
             current[key] = str(values[key]).strip()
-    domain = current.get("DOMAIN", "").strip().lower()
-    domain = domain.replace("https://", "").replace("http://", "").strip("/")
-    if domain.startswith("mirror."):
-        domain = domain[7:]
-    current["DOMAIN"] = domain
-    site = current.get("SITE_ADDRESS", "").strip().lower()
-    site = site.replace("https://", "").replace("http://", "").strip("/")
-    if not site or site in {"mirror.example.com", "example.com"}:
-        site = f"mirror.{domain}" if domain else site
-    current["SITE_ADDRESS"] = site
+    def clean_host(value: str) -> str:
+        host = (value or "").strip().lower()
+        host = host.replace("https://", "").replace("http://", "").split("/")[0]
+        return host
+
+    current["DOMAIN"] = clean_host(current.get("DOMAIN", ""))
+    current["SITE_ADDRESS"] = clean_host(current.get("SITE_ADDRESS", ""))
+    current["PANEL_ADDRESS"] = clean_host(current.get("PANEL_ADDRESS", ""))
+    pref = (current.get("EDGE_PREFERENCE") or "auto").strip().lower()
+    aliases = {
+        "nginx": "behind-nginx",
+        "behind-nginx": "behind-nginx",
+        "caddy": "behind-caddy",
+        "behind-caddy": "behind-caddy",
+        "direct": "direct",
+        "edge": "direct",
+        "auto": "auto",
+    }
+    current["EDGE_PREFERENCE"] = aliases.get(pref, "auto")
     if current.get("HTTP_ONLY", "false").lower() in {"1", "true", "yes", "on"}:
         current["HTTP_ONLY"] = "true"
     else:
@@ -130,6 +141,7 @@ def write_env(values: dict) -> None:
         f"HTTPS_BIND={current.get('HTTPS_BIND', '127.0.0.1')}",
         f"COMPOSE_PROFILES={current.get('COMPOSE_PROFILES', '')}",
         f"EDGE_MODE={current.get('EDGE_MODE', '')}",
+        f"EDGE_PREFERENCE={current.get('EDGE_PREFERENCE', 'auto')}",
         f"PANEL_ADDRESS={current.get('PANEL_ADDRESS', '')}",
         f"PANEL_PORT={current.get('PANEL_PORT', str(PORT))}",
         "",
@@ -143,10 +155,7 @@ def public_config() -> dict:
     data["DOCKERHUB_PASSWORD_SET"] = bool(pwd)
     data["DOCKERHUB_PASSWORD"] = "********" if pwd else ""
     data["panel_port"] = PORT
-    if not data.get("PANEL_ADDRESS"):
-        domain = (data.get("DOMAIN") or "").strip()
-        if domain and domain != "example.com":
-            data["PANEL_ADDRESS"] = f"panel.{domain}"
+    data["EDGE_PREFERENCE"] = data.get("EDGE_PREFERENCE") or "auto"
     return data
 
 
@@ -224,9 +233,12 @@ def deploy_job(payload: dict) -> None:
         _, out = run_cmd(["sh", "scripts/print-client-config.sh"], timeout=20)
         append_job(out)
         env = load_env()
-        site = env.get("SITE_ADDRESS", "docker.example.com")
+        site = env.get("SITE_ADDRESS") or ""
         JOB["ok"] = True
-        append_job(f"部署完成。浏览器打开 https://{site}/ 应是镜像站说明页。")
+        if site:
+            append_job(f"部署完成。群晖 / registry-mirrors 填 https://{site}")
+        else:
+            append_job("部署完成。请在面板填写加速站主机名后再部署一次。")
     except Exception as exc:  # noqa: BLE001
         JOB["ok"] = False
         append_job(f"失败：{exc}")

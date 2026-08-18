@@ -209,10 +209,19 @@ detect() {
 
   mode="direct"
   reason="80/443 空闲，由镜像站 edge 容器对外签证书"
+  pref="$(printf '%s' "${EDGE_PREFERENCE:-auto}" | tr '[:upper:]' '[:lower:]')"
+  case "$pref" in
+    nginx) pref="behind-nginx" ;;
+    caddy) pref="behind-caddy" ;;
+    edge) pref="direct" ;;
+  esac
 
   if [ -n "${ADAPT_FORCE_MODE:-}" ]; then
     mode="$ADAPT_FORCE_MODE"
     reason="手动指定 ADAPT_FORCE_MODE=$ADAPT_FORCE_MODE"
+  elif [ "$pref" = "behind-nginx" ] || [ "$pref" = "behind-caddy" ] || [ "$pref" = "direct" ]; then
+    mode="$pref"
+    reason="面板指定接入方式：${pref}"
   else
     # 自己的 edge 占着 80/443 仍算直连
     if [ "$http_class" = "self" ] || [ "$https_class" = "self" ]; then
@@ -268,13 +277,14 @@ detect() {
     fi
   fi
 
-  SITE_ADDRESS="${SITE_ADDRESS:-docker.nodelink.uk}"
+  SITE_ADDRESS="${SITE_ADDRESS:-}"
   DOMAIN="${DOMAIN:-}"
-  ACME_EMAIL="${ACME_EMAIL:-admin@example.com}"
-  PANEL_ADDRESS="$(panel_address)"
+  ACME_EMAIL="${ACME_EMAIL:-}"
+  PANEL_ADDRESS="${PANEL_ADDRESS:-}"
 
   emit MODE "$mode"
   emit REASON "$reason"
+  emit EDGE_PREFERENCE "${EDGE_PREFERENCE:-auto}"
   emit SITE_ADDRESS "$SITE_ADDRESS"
   emit DOMAIN "$DOMAIN"
   emit ACME_EMAIL "$ACME_EMAIL"
@@ -330,9 +340,7 @@ configure() {
   set_env HTTPS_BIND 127.0.0.1
   set_env HTTPS_PORT 5443
   set_env EDGE_MODE "$MODE"
-  if [ -z "${PANEL_ADDRESS:-}" ]; then
-    PANEL_ADDRESS="$(panel_address)"
-  fi
+  set_env EDGE_PREFERENCE "${EDGE_PREFERENCE:-auto}"
   if [ -n "${PANEL_ADDRESS:-}" ]; then
     set_env PANEL_ADDRESS "$PANEL_ADDRESS"
   fi
@@ -586,15 +594,8 @@ read_live_file() {
 }
 
 panel_address() {
-  if [ -n "${PANEL_ADDRESS:-}" ]; then
-    printf '%s' "$PANEL_ADDRESS"
-    return 0
-  fi
-  if [ -n "${DOMAIN:-}" ] && [ "$DOMAIN" != "example.com" ]; then
-    printf 'panel.%s' "$DOMAIN"
-    return 0
-  fi
-  printf ''
+  # 只认用户/面板写进 .env 的值，不根据主域名擅自拼 panel.xxx
+  printf '%s' "${PANEL_ADDRESS:-}"
 }
 
 find_existing_cert_dir() {
@@ -972,11 +973,17 @@ integrate() {
       fi
       ;;
     behind-nginx)
+      if [ -z "$(find_nginx_dir)" ] && ! command -v nginx >/dev/null 2>&1; then
+        fail "面板指定了 Nginx，但这台机器找不到 nginx / 可写 conf.d。改选自动或 Caddy，或先安装 Nginx"
+      fi
       integrate_nginx
       integrate_nginx_panel || true
       verify_public
       ;;
     behind-caddy)
+      if [ -z "$(find_host_caddyfile)" ] && ! command -v caddy >/dev/null 2>&1; then
+        fail "面板指定了 Caddy，但这台机器找不到 Caddyfile。改选自动或 Nginx，或先安装宿主机 Caddy"
+      fi
       integrate_caddy
       verify_public
       ;;

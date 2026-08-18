@@ -129,7 +129,7 @@ cat > www/index.html <<EOF
 <body>
   <div class="wrap">
     <header>
-      <div class="brand"><span class="mark" aria-hidden="true"></span> NodeLink Mirror</div>
+      <div class="brand"><span class="mark" aria-hidden="true"></span> Docker Mirror</div>
       <div class="status" id="live"><span class="dot" id="dot"></span><span id="live-text">正在检测站点…</span></div>
     </header>
 

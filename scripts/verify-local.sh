@@ -23,6 +23,9 @@ for f in \
   scripts/healthcheck.sh \
   scripts/configure-client.sh \
   scripts/print-client-config.sh \
+  scripts/start-panel.sh \
+  panel/app.py \
+  panel/docker-mirror-panel.service \
   www/install.sh \
   examples/daemon.json.https
 do
@@ -106,6 +109,9 @@ if [ $? -eq 0 ]; then
 else
   fail "docker-compose.yml 结构不对"
 fi
+
+python3 -m py_compile panel/app.py
+ok "panel/app.py 语法"
 
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   if docker compose -f docker-compose.yml config >/dev/null; then

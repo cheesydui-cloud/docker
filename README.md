@@ -41,6 +41,24 @@ Cloudflare 必须 **关闭小橙云（仅 DNS）**，否则证书和 Registry �
 
 ## 二、美国服务器一键部署
 
+### 方式 A：网页面板（推荐，域名在页面里填）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install.sh \
+  | sudo bash -s -- --panel
+```
+
+脚本只装 Docker、拉代码、启动控制台。然后：
+
+1. 浏览器打开 `http://美国服务器IP:8088/`
+2. 用终端打印的**面板密码**登录（也在 `/opt/docker-mirror/panel/.secret`）
+3. 填写主域名、证书邮箱、Docker Hub Token
+4. 点 **保存并部署**
+
+安全组额外放行 **TCP 8088**（建议只给你自己的 IP）。域名、证书、重启、日志都在这个页面完成。
+
+### 方式 B：命令行一次填完
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install.sh \
   | sudo bash -s -- --domain 你的域名.com --email 你的邮箱@你的域名.com

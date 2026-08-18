@@ -1,0 +1,17 @@
+[Unit]
+Description=Docker mirror control panel
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/docker-mirror
+Environment=MIRROR_ROOT=/opt/docker-mirror
+Environment=PANEL_HOST=0.0.0.0
+Environment=PANEL_PORT=8088
+ExecStart=/usr/bin/python3 /opt/docker-mirror/panel/app.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

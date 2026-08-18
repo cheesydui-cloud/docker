@@ -5,13 +5,17 @@
 #   mirror / docker / ghcr / gcr / quay / k8s / nvcr / mcr
 #   或一条泛域名 * 
 #
-# 然后执行：
+# 网页面板部署（推荐，域名在页面里填）：
+#   curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install.sh | sudo bash -s -- --panel
+#
+# 命令行直接部署：
 #   curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install.sh | sudo bash -s -- --domain example.com --email you@example.com
 #
 # 可选：
 #   --hub-user NAME --hub-token TOKEN   Docker Hub 账号，强烈建议填
 #   --dir /opt/docker-mirror            安装目录
 #   --skip-dns                          跳过 DNS 检查（不推荐）
+#   --panel-port 8088                   控制台端口
 set -eu
 
 REPO_URL="${REPO_URL:-https://github.com/cheesydui-cloud/docker.git}"
@@ -23,6 +27,8 @@ ACME_EMAIL=""
 HUB_USER=""
 HUB_TOKEN=""
 SKIP_DNS="false"
+PANEL_ONLY="false"
+PANEL_PORT="${PANEL_PORT:-8088}"
 
 usage() {
   sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
@@ -47,6 +53,8 @@ while [ $# -gt 0 ]; do
     --hub-token) HUB_TOKEN="${2:-}"; shift 2 ;;
     --dir) INSTALL_DIR="${2:-}"; shift 2 ;;
     --skip-dns) SKIP_DNS="true"; shift ;;
+    --panel|--panel-only) PANEL_ONLY="true"; shift ;;
+    --panel-port) PANEL_PORT="${2:-}"; shift 2 ;;
     -h|--help) usage ;;
     *) die "未知参数：$1" ;;
   esac
@@ -54,13 +62,21 @@ done
 
 need_root
 
+if [ "$PANEL_ONLY" = "true" ]; then
+  DOMAIN="${DOMAIN:-panel.local}"
+  SITE_HOST="${SITE_HOST:-mirror.example.com}"
+  ACME_EMAIL="${ACME_EMAIL:-admin@example.com}"
+fi
+
 if [ -z "$DOMAIN" ]; then
   printf "请输入主域名（例如 example.com，不要带 https://）： "
   read -r DOMAIN
 fi
 DOMAIN="$(printf '%s' "$DOMAIN" | tr '[:upper:]' '[:lower:]' | sed 's|^https\?://||; s|/$||; s|^mirror\.||')"
 [ -n "$DOMAIN" ] || die "域名不能为空"
-[ "$DOMAIN" != "example.com" ] || die "请换成你自己的域名，不要用 example.com"
+if [ "$PANEL_ONLY" != "true" ]; then
+  [ "$DOMAIN" != "example.com" ] || die "请换成你自己的域名，不要用 example.com"
+fi
 
 if [ -z "$SITE_HOST" ]; then
   SITE_HOST="mirror.${DOMAIN}"
@@ -145,6 +161,22 @@ fi
 cd "$INSTALL_DIR"
 chmod +x install.sh scripts/*.sh www/install.sh 2>/dev/null || true
 
+if [ "$PANEL_ONLY" = "true" ]; then
+  if [ ! -f .env ]; then
+    cp .env.example .env
+  fi
+  if command -v ufw >/dev/null 2>&1; then
+    ufw allow "${PANEL_PORT}/tcp" || true
+  fi
+  if command -v firewall-cmd >/dev/null 2>&1; then
+    firewall-cmd --permanent --add-port="${PANEL_PORT}/tcp" || true
+    firewall-cmd --reload || true
+  fi
+  log "只启动网页面板，域名请在浏览器里填写"
+  PANEL_PORT="$PANEL_PORT" sh scripts/start-panel.sh
+  exit 0
+fi
+
 log "写入 .env"
 cat > .env <<EOF
 SITE_ADDRESS=${SITE_HOST}
@@ -186,11 +218,13 @@ done
 
 sh scripts/healthcheck.sh || true
 sh scripts/print-client-config.sh
+PANEL_PORT="$PANEL_PORT" sh scripts/start-panel.sh || true
 
 echo
 echo "=========================================="
 echo "部署完成"
 echo "主站： https://${SITE_HOST}/"
+echo "控制台： http://<美国服务器IP>:${PANEL_PORT}/"
 echo "国内机器一键接入："
 echo "  curl -fsSL https://${SITE_HOST}/install.sh | sudo MIRROR=https://${SITE_HOST} sh"
 echo "=========================================="

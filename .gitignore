@@ -1,5 +1,6 @@
 .env
 data/
+panel/.secret
 certs/
 *.log
 .DS_Store

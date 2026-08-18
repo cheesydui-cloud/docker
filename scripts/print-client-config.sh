@@ -18,6 +18,15 @@ MIRROR="https://${SITE_ADDRESS}"
 GITHUB_PROXY_ENABLED="${GITHUB_PROXY_ENABLED:-false}"
 GITHUB_PROXY_PORT="${GITHUB_PROXY_PORT:-3128}"
 GITHUB_PROXY_ALLOW="${GITHUB_PROXY_ALLOW:-}"
+PUBLIC_IP=""
+for url in https://api.ipify.org https://ifconfig.me/ip https://ipv4.icanhazip.com; do
+  PUBLIC_IP="$(curl -fsS --connect-timeout 3 --max-time 5 "$url" 2>/dev/null | tr -d '[:space:]' || true)"
+  case "$PUBLIC_IP" in
+    [0-9]*.[0-9]*.[0-9]*.[0-9]*) break ;;
+    *) PUBLIC_IP="" ;;
+  esac
+done
+[ -n "$PUBLIC_IP" ] || PUBLIC_IP="美国机IP"
 
 cat <<EOF
 ======== 国内 Docker 客户端 ========
@@ -64,10 +73,10 @@ case "$enabled" in
 
 ======== 国内机访问 GitHub（正向代理） ========
 
-在国内机器上执行一次（把美国机IP换成这台 VPS 的公网 IP）：
+在国内机器上执行一次：
 
-  export http_proxy=http://美国机IP:${GITHUB_PROXY_PORT}
-  export https_proxy=http://美国机IP:${GITHUB_PROXY_PORT}
+  export http_proxy=http://${PUBLIC_IP}:${GITHUB_PROXY_PORT}
+  export https_proxy=http://${PUBLIC_IP}:${GITHUB_PROXY_PORT}
   export no_proxy=localhost,127.0.0.1,${SITE_ADDRESS}
 
 之后命令不用改：

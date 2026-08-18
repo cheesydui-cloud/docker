@@ -580,7 +580,19 @@ async function boot() {
     if ($("GITHUB_PROXY_ALLOW") && cfg.GITHUB_PROXY_ALLOW !== undefined) {
       $("GITHUB_PROXY_ALLOW").value = String(cfg.GITHUB_PROXY_ALLOW || "").replace(/[,;]+/g, " ").trim();
     }
+    window.PUBLIC_IP = cfg.PUBLIC_IP || "";
     renderGithubSnippet();
+    if (!window.PUBLIC_IP) {
+      setTimeout(async () => {
+        try {
+          const again = await api("/api/config");
+          if (again.PUBLIC_IP) {
+            window.PUBLIC_IP = again.PUBLIC_IP;
+            renderGithubSnippet();
+          }
+        } catch (_e) {}
+      }, 1200);
+    }
     refreshOverview();
     pollJob();
   } catch (e) {
@@ -595,10 +607,11 @@ function renderGithubSnippet() {
   if (!el) return;
   const port = ($("GITHUB_PROXY_PORT") && $("GITHUB_PROXY_PORT").value.trim()) || "3128";
   const site = ($("SITE_ADDRESS") && $("SITE_ADDRESS").value.trim()) || "";
+  const host = window.PUBLIC_IP || "美国机IP";
   const noProxy = site ? "localhost,127.0.0.1," + site : "localhost,127.0.0.1";
   el.textContent =
-    "export http_proxy=http://美国机IP:" + port + "\n" +
-    "export https_proxy=http://美国机IP:" + port + "\n" +
+    "export http_proxy=http://" + host + ":" + port + "\n" +
+    "export https_proxy=http://" + host + ":" + port + "\n" +
     "export no_proxy=" + noProxy;
 }
 

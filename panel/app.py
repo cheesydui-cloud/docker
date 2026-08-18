@@ -5,7 +5,9 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import re
 import secrets
+import socket
 import subprocess
 import threading
 import time
@@ -13,6 +15,7 @@ from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
 
 ROOT = Path(os.environ.get("MIRROR_ROOT", Path(__file__).resolve().parent.parent)).resolve()
 SECRET_FILE = ROOT / "panel" / ".secret"
@@ -219,6 +222,80 @@ def write_env(values: dict) -> None:
     ENV_FILE.write_text("\n".join(lines), encoding="utf-8")
 
 
+_PUBLIC_IP = {"value": "", "checked": 0}
+
+
+def _looks_public_ip(value: str) -> bool:
+    text = (value or "").strip()
+    if not re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", text):
+        return False
+    parts = [int(p) for p in text.split(".")]
+    if any(p > 255 for p in parts):
+        return False
+    first, second = parts[0], parts[1]
+    if first == 10 or first == 127 or first >= 224:
+        return False
+    if first == 192 and second == 168:
+        return False
+    if first == 172 and 16 <= second <= 31:
+        return False
+    if first == 169 and second == 254:
+        return False
+    if text in {"0.0.0.0", "255.255.255.255"}:
+        return False
+    return True
+
+
+def detect_public_ip(refresh: bool = False) -> str:
+    now = int(time.time())
+    cached = _PUBLIC_IP.get("value") or ""
+    checked = int(_PUBLIC_IP.get("checked") or 0)
+    if cached and not refresh and now - checked < 300:
+        return cached
+    if not refresh and cached:
+        return cached
+    urls = (
+        "https://api.ipify.org",
+        "https://ifconfig.me/ip",
+        "https://ipv4.icanhazip.com",
+    )
+    for url in urls:
+        try:
+            req = Request(url, headers={"User-Agent": "docker-mirror-panel"})
+            with urlopen(req, timeout=4) as resp:
+                ip = resp.read().decode("utf-8", "replace").strip()
+            if _looks_public_ip(ip):
+                _PUBLIC_IP["value"] = ip
+                _PUBLIC_IP["checked"] = now
+                return ip
+        except Exception:  # noqa: BLE001
+            continue
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(2)
+        sock.connect(("1.1.1.1", 80))
+        ip = sock.getsockname()[0]
+        sock.close()
+        if _looks_public_ip(ip):
+            _PUBLIC_IP["value"] = ip
+            _PUBLIC_IP["checked"] = now
+            return ip
+    except Exception:  # noqa: BLE001
+        pass
+    _PUBLIC_IP["checked"] = now
+    return cached
+
+
+def _refresh_public_ip() -> None:
+    try:
+        detect_public_ip(refresh=True)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+threading.Thread(target=_refresh_public_ip, daemon=True).start()
+
+
 def load_version() -> str:
     path = ROOT / "VERSION"
     if path.is_file():
@@ -237,6 +314,9 @@ def public_config() -> dict:
     data["EDGE_PREFERENCE"] = data.get("EDGE_PREFERENCE") or "auto"
     data["PANEL_USERNAME"] = load_username()
     data["VERSION"] = load_version()
+    data["PUBLIC_IP"] = detect_public_ip()
+    if not data["PUBLIC_IP"]:
+        threading.Thread(target=_refresh_public_ip, daemon=True).start()
     return data
 
 

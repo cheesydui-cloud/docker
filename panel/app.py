@@ -165,24 +165,20 @@ def deploy_job(payload: dict) -> None:
     JOB["finished"] = 0
     try:
         write_env(payload)
-        env = load_env()
-        # 80/443 常被 3x-ui / 其他站点占用，自动改绑本机 5080。
-        if env.get("HTTP_PORT", "80") in {"80", ""}:
-            env["HTTP_PORT"] = "5080"
-            env["HTTPS_PORT"] = env.get("HTTPS_PORT") if env.get("HTTPS_PORT") not in {"443", ""} else "5443"
-            env["HTTP_BIND"] = env.get("HTTP_BIND") or "127.0.0.1"
-            env["HTTPS_BIND"] = env.get("HTTPS_BIND") or "127.0.0.1"
-            write_env(env)
-            append_job("检测到将占用 80/443，已改为 127.0.0.1:5080，避免和现有站点抢端口。")
-        append_job("已写入 .env")
+        append_job("已写入域名 / 邮箱 / Docker Hub 配置")
         skip_dns = bool(payload.get("skip_dns"))
         if not skip_dns:
             append_job("== 检查 DNS ==")
             code, out = run_cmd(["sh", "scripts/check-dns.sh"], timeout=60)
             append_job(out)
             if code != 0:
-                raise RuntimeError("DNS 未就绪。请先把子域名解析到这台美国服务器，或勾选跳过 DNS。")
-        append_job("== 生成站点与 Caddy 配置 ==")
+                raise RuntimeError("DNS 未就绪。请先把加速站主机名解析到这台美国服务器，或勾选跳过 DNS。")
+        append_job("== 探测 80/443 占用并自动选择接入方式 ==")
+        code, out = run_cmd(["sh", "scripts/adapt-host.sh", "configure"], timeout=60)
+        append_job(out)
+        if code != 0:
+            raise RuntimeError("主机探测失败")
+        append_job("== 生成站点与内部 Caddy 配置 ==")
         for script in ("scripts/render-site.sh", "scripts/render-caddyfile.sh"):
             code, out = run_cmd(["sh", script], timeout=30)
             append_job(out)
@@ -195,29 +191,22 @@ def deploy_job(payload: dict) -> None:
         append_job(out)
         if code != 0:
             raise RuntimeError("docker compose up 失败")
-        time.sleep(4)
+        time.sleep(3)
+        append_job("== 接入现有 Nginx/Caddy 并处理证书 ==")
+        code, out = run_cmd(["sh", "scripts/adapt-host.sh", "integrate"], timeout=240)
+        append_job(out)
+        if code != 0:
+            raise RuntimeError("自动接入失败（后端多半已起来，看上面探测结果）")
         append_job("== 健康检查 ==")
         code, out = run_cmd(["sh", "scripts/healthcheck.sh"], timeout=120)
         append_job(out)
         append_job("== 国内客户端配置 ==")
         _, out = run_cmd(["sh", "scripts/print-client-config.sh"], timeout=20)
         append_job(out)
-        site = load_env().get("SITE_ADDRESS", "docker.example.com")
-        append_job("== 请把这段加到已经占用 80/443 的 Caddy / Nginx ==")
-        append_job(
-            f"{site} {{\n"
-            f"\treverse_proxy 127.0.0.1:5080 {{\n"
-            f"\t\tflush_interval -1\n"
-            f"\t\ttransport http {{\n"
-            f"\t\t\tread_timeout 1h\n"
-            f"\t\t\twrite_timeout 1h\n"
-            f"\t\t}}\n"
-            f"\t}}\n"
-            f"}}\n"
-        )
-        append_job("Nginx 示例见 /opt/docker-mirror/examples/nginx-behind-existing.conf")
+        env = load_env()
+        site = env.get("SITE_ADDRESS", "docker.example.com")
         JOB["ok"] = True
-        append_job("部署完成。Caddy 日志为空是正常的：镜像站不再监听 80，请去现有反代加站点。")
+        append_job(f"部署完成。浏览器打开 https://{site}/ 应是镜像站说明页。")
     except Exception as exc:  # noqa: BLE001
         JOB["ok"] = False
         append_job(f"失败：{exc}")

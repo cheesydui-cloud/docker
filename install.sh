@@ -199,6 +199,9 @@ if [ "$SKIP_DNS" != "true" ]; then
   sh scripts/check-dns.sh
 fi
 
+log "探测 80/443 并自动选择直连或挂到现有反代"
+sh scripts/adapt-host.sh configure
+
 log "生成站点与 Caddy 配置"
 sh scripts/render-site.sh
 sh scripts/render-caddyfile.sh
@@ -206,6 +209,9 @@ sh scripts/render-caddyfile.sh
 log "启动服务"
 docker compose pull
 docker compose up -d
+
+log "接入现有 Nginx/Caddy 并处理证书"
+sh scripts/adapt-host.sh integrate || true
 
 log "等待证书与健康检查"
 sleep 5

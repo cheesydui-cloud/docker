@@ -24,6 +24,7 @@ for f in \
   scripts/configure-client.sh \
   scripts/print-client-config.sh \
   scripts/start-panel.sh \
+  scripts/adapt-host.sh \
   panel/app.py \
   panel/docker-mirror-panel.service \
   www/install.sh \
@@ -120,6 +121,17 @@ fi
 
 python3 -m py_compile panel/app.py
 ok "panel/app.py 语法"
+
+if sh scripts/adapt-host.sh detect | grep -q '^MODE='; then
+  ok "adapt-host detect 输出 MODE"
+else
+  fail "adapt-host detect 无 MODE"
+fi
+if grep -q 'behind-nginx' scripts/adapt-host.sh && grep -q 'behind-caddy' scripts/adapt-host.sh && grep -q 'certbot certonly' scripts/adapt-host.sh; then
+  ok "adapt-host 含 Nginx/Caddy/证书分支"
+else
+  fail "adapt-host 分支不完整"
+fi
 
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   if docker compose -f docker-compose.yml config >/dev/null; then

@@ -45,11 +45,19 @@ fi
 
 mkdir -p data/dockerhub data/ghcr data/gcr data/quay data/k8s data/nvcr data/mcr www
 chmod +x install.sh scripts/*.sh www/install.sh
+echo "探测 80/443 占用并自动选择直连或挂到现有反代..."
+sh scripts/adapt-host.sh configure
+# configure 可能改写了 .env
+set -a
+. ./.env
+set +a
 sh scripts/render-site.sh
 sh scripts/render-caddyfile.sh
 
 echo "正在启动镜像加速站..."
 docker compose up -d
+echo "把域名接到现有 Nginx/Caddy（如需要）并处理证书..."
+sh scripts/adapt-host.sh integrate || true
 
 echo
 echo "服务已启动。"

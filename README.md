@@ -57,19 +57,18 @@ curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install
 
 安全组额外放行 **TCP 8088**（建议只给你自己的 IP）。域名、证书、重启、日志都在这个页面完成。
 
-### 和 3x-ui / 已有网站同机（80/443 已被占用）
+### 和 3x-ui / 已有网站同机
 
-这是常见情况。镜像站 **不要再抢 80/443**，默认只听 `127.0.0.1:5080`。  
-在**已经占用 80/443 的 Caddy / Nginx / 3x-ui** 里加一条反代：
+点「保存并部署」会自动探测 80/443：
 
-```caddy
-docker.nodelink.uk {
-	reverse_proxy 127.0.0.1:5080
-}
-```
+| 探测结果 | 自动做什么 |
+| --- | --- |
+| 80/443 空闲 | 镜像站自己占端口，Caddy 签证书 |
+| Nginx 占用 | 只听 `127.0.0.1:5080`，写 `/etc/nginx/conf.d/docker-mirror.conf`，用 certbot 签证书并 reload |
+| 宿主机 Caddy 占用 | 把站点写入现有 Caddyfile 并 reload，证书仍由那套 Caddy 签 |
+| 其他未知进程 | 后端照常启动，任务日志里打印要粘贴的片段，并标明是谁占了 80 |
 
-Nginx 示例见 `examples/nginx-behind-existing.conf`。  
-证书继续由原来的面板签发。群晖仍填 `https://docker.你的域名`。
+一般不用再手改 Nginx。群晖仍填 `https://docker.你的域名`。
 
 ### 方式 B：命令行一次填完
 

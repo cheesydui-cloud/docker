@@ -120,9 +120,8 @@ docker compose up -d
 log "重新写入 Nginx/Caddy 并处理证书"
 sh scripts/adapt-host.sh integrate
 
-if command -v systemctl >/dev/null 2>&1 && [ -f /etc/systemd/system/docker-mirror-panel.service ]; then
-  PANEL_PORT="${PANEL_PORT:-8088}" sh scripts/start-panel.sh || systemctl restart docker-mirror-panel || true
-fi
+log "重启控制台（必须，否则新接口不会生效）"
+PANEL_PORT="${PANEL_PORT:-8088}" sh scripts/start-panel.sh || systemctl restart docker-mirror-panel || true
 
 log "健康检查"
 sh scripts/healthcheck.sh || true

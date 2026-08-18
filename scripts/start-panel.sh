@@ -31,8 +31,9 @@ if command -v systemctl >/dev/null 2>&1; then
       "$UNIT_SRC" > "$tmp"
   mv "$tmp" "$UNIT_DST"
   systemctl daemon-reload
-  systemctl enable --now docker-mirror-panel
-  echo "面板已用 systemd 启动"
+  systemctl enable docker-mirror-panel >/dev/null 2>&1 || true
+  systemctl restart docker-mirror-panel
+  echo "面板已重启"
 else
   echo "没有 systemd，改为前台运行面板"
   exec env MIRROR_ROOT="$ROOT" PANEL_PORT="$PORT" python3 "$ROOT/panel/app.py"

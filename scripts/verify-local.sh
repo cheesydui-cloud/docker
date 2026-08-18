@@ -139,6 +139,16 @@ if grep -q '/api/account' panel/app.py && grep -q '/api/account' panel/index.htm
 else
   fail "缺少改账号密码"
 fi
+if grep -q 'class="sidebar"' panel/index.html && grep -q 'showPage(' panel/index.html && grep -q '运行概览' panel/index.html; then
+  ok "控制台是侧边栏布局"
+else
+  fail "控制台还不是侧边栏"
+fi
+if grep -q 'systemctl restart docker-mirror-panel' scripts/start-panel.sh && grep -q '重启控制台' scripts/upgrade.sh; then
+  ok "升级会强制重启控制台进程"
+else
+  fail "升级可能仍沿用旧面板进程"
+fi
 if grep -R -n 'nodelink.uk' --include='*.sh' --include='*.py' --include='*.yml' --include='*.html' --include='*.md' --include='*.example' --include='*.conf' --include='*.caddyfile' . | grep -v './.git/' | grep -v './scripts/verify-local.sh'; then
   fail "代码里仍有写死的 nodelink.uk"
 else

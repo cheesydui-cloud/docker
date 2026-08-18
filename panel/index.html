@@ -5,237 +5,427 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>镜像加速站控制台</title>
   <style>
+    :root {
+      --bg: #f4efe8;
+      --sidebar: #fbf8f4;
+      --card: #fffdf9;
+      --line: #eadfd3;
+      --text: #2c241c;
+      --muted: #7a7066;
+      --accent: #b56a3c;
+      --accent-soft: #efe0d2;
+      --ok: #2f7d4a;
+      --bad: #b42318;
+      --warn: #9a6700;
+      --shadow: 0 10px 30px rgba(80, 52, 28, .06);
+      --radius: 16px;
+    }
     * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
       margin: 0;
-      background: #f5f5f5;
-      color: #111;
-      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
     }
-    main { max-width: 880px; margin: 0 auto; padding: 28px 16px 72px; }
-    h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; }
-    h2 { margin: 0 0 14px; font-size: 14px; font-weight: 600; }
-    .sub { margin: 0 0 16px; color: #666; }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    a { color: inherit; }
+
+    .shell { min-height: 100%; display: flex; }
+    .sidebar {
+      width: 232px;
+      flex: 0 0 232px;
+      background: var(--sidebar);
+      border-right: 1px solid var(--line);
+      padding: 22px 14px;
+      display: flex;
+      flex-direction: column;
+    }
+    .brand { padding: 6px 12px 22px; }
+    .brand b { display: block; font-size: 16px; letter-spacing: .02em; }
+    .brand span { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .nav-label {
+      margin: 16px 12px 8px;
+      color: #9a8f84;
+      font-size: 12px;
+    }
+    .nav-btn {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    .nav-btn svg { width: 18px; height: 18px; flex: 0 0 18px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+    .nav-btn:hover { background: #f3ebe2; }
+    .nav-btn.active { background: var(--accent-soft); color: #6a3d20; font-weight: 600; }
+    .sidebar-foot { margin-top: auto; padding: 14px 12px 4px; color: var(--muted); font-size: 12px; }
+
+    .main { flex: 1; min-width: 0; padding: 22px 28px 48px; }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .topbar h1 { margin: 0 0 6px; font-size: 26px; font-weight: 650; letter-spacing: -.03em; }
+    .topbar p { margin: 0; color: var(--muted); }
+    .who {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 8px 6px 14px;
+      box-shadow: var(--shadow);
+    }
+    .who b { font-weight: 600; }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+    .stat { padding: 18px 20px; border-right: 1px solid var(--line); }
+    .stat:last-child { border-right: 0; }
+    .stat b { display: block; color: var(--muted); font-size: 13px; font-weight: 500; margin-bottom: 8px; }
+    .stat strong { display: block; font-size: 22px; letter-spacing: -.03em; word-break: break-all; }
+    .stat em { display: block; margin-top: 6px; color: var(--muted); font-style: normal; font-size: 12px; }
+
     .card {
-      background: #fff;
-      border: 1px solid #e3e3e3;
-      padding: 18px 18px 16px;
-      margin-bottom: 12px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px 22px;
+      margin-bottom: 14px;
     }
-    .top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
-    label { display: block; margin: 0 0 6px; color: #333; }
-    .field { margin-bottom: 12px; }
+    .card h2 { margin: 0 0 6px; font-size: 16px; }
+    .hint { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .field { margin-bottom: 14px; }
+    label { display: block; margin: 0 0 6px; color: #4d443c; font-size: 13px; }
     input, select {
       width: 100%;
-      height: 36px;
-      padding: 0 10px;
-      border: 1px solid #ccc;
-      background: #fff;
-      color: #111;
-      font: inherit;
-    }
-    input:focus, select:focus { outline: 1px solid #111; border-color: #111; }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-    .metric { border: 1px solid #e5e5e5; background: #fafafa; padding: 10px 12px; }
-    .metric b { display: block; color: #666; font-weight: 500; margin-bottom: 4px; }
-    .metric span { word-break: break-all; }
-    .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
-    button {
-      height: 34px;
+      height: 40px;
       padding: 0 12px;
-      border: 1px solid #bbb;
+      border: 1px solid #e2d6c8;
+      border-radius: 10px;
       background: #fff;
-      color: #111;
-      font: inherit;
-      cursor: pointer;
+      color: var(--text);
     }
-    button:hover { background: #f2f2f2; }
-    button:disabled { opacity: .55; cursor: not-allowed; }
-    .primary { background: #111; color: #fff; border-color: #111; }
-    .primary:hover { background: #333; }
-    .danger { color: #a40000; border-color: #d0b0b0; }
+    input:focus, select:focus { outline: 2px solid #e8c9ae; border-color: var(--accent); }
+    .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+    .btn {
+      min-height: 38px;
+      padding: 0 14px;
+      border-radius: 10px;
+      border: 1px solid #e2d6c8;
+      background: #fff;
+      color: var(--text);
+    }
+    .btn:hover { background: #f7efe6; }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+    .btn.primary { background: #2c241c; color: #fff; border-color: #2c241c; }
+    .btn.primary:hover { background: #44372c; }
+    .btn.danger { color: var(--bad); border-color: #efc4c0; background: #fff; }
+    .check { display: flex; align-items: center; gap: 8px; margin: 2px 0 14px; color: #4d443c; }
+    .check input { width: auto; height: auto; }
     pre {
       margin: 0;
-      background: #fafafa;
-      border: 1px solid #e5e5e5;
-      padding: 10px 12px;
+      background: #faf6f1;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
       overflow: auto;
-      min-height: 120px;
+      min-height: 180px;
       white-space: pre-wrap;
-      font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
-    .ok { color: #0a7a2f; }
-    .bad { color: #b42318; }
-    .warn { color: #8a5a00; }
-    .check { display: flex; align-items: center; gap: 8px; margin: 4px 0 12px; color: #444; }
-    .check input { width: auto; height: auto; }
-    .who { color: #666; font-size: 13px; margin-right: 8px; }
-    @media (max-width: 800px) {
-      .row, .metrics { grid-template-columns: 1fr; }
-      .top { flex-direction: column; }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+    .warn { color: var(--warn); }
+    .flash { margin: 12px 0 0; }
+
+    .login-wrap {
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .login-card {
+      width: min(440px, 100%);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      padding: 28px 28px 24px;
+    }
+    .login-card h1 { margin: 0 0 6px; font-size: 24px; }
+    .ghost { display: none; }
+
+    @media (max-width: 980px) {
+      .shell { display: block; }
+      .sidebar { width: auto; flex: none; border-right: 0; border-bottom: 1px solid var(--line); }
+      .nav-scroll { display: flex; gap: 6px; overflow: auto; }
+      .nav-label { display: none; }
+      .nav-btn { white-space: nowrap; }
+      .sidebar-foot { display: none; }
+      .main { padding: 18px 14px 40px; }
+      .stats, .row { grid-template-columns: 1fr 1fr; }
+      .stat { border-right: 0; border-bottom: 1px solid var(--line); }
+    }
+    @media (max-width: 640px) {
+      .stats, .row { grid-template-columns: 1fr; }
+      .topbar { flex-direction: column; }
     }
   </style>
 </head>
 <body>
-<main>
-  <div class="top">
-    <div>
-      <h1>镜像加速站控制台</h1>
-      <p class="sub">域名和接入方式在这里填。群晖只填加速站主机名。</p>
+<div id="login-screen" class="login-wrap">
+  <section class="login-card">
+    <h1>控制台登录</h1>
+    <p class="hint">默认账号 admin，密码在安装结束时打印，也在 <code>panel/.secret</code></p>
+    <div class="field">
+      <label for="login-user">账号</label>
+      <input id="login-user" value="admin" autocomplete="username">
     </div>
-    <div id="who-box" style="display:none">
-      <span class="who" id="who"></span>
-      <button type="button" onclick="logout()">退出</button>
+    <div class="field">
+      <label for="token">密码</label>
+      <input id="token" type="password" autocomplete="current-password">
     </div>
-  </div>
-
-  <section class="card" id="login-card">
-    <h2>登录</h2>
-    <p class="sub">默认账号 admin，密码在安装结束时打印，也在安装目录 <code>panel/.secret</code></p>
-    <div class="row">
-      <div class="field">
-        <label for="login-user">账号</label>
-        <input id="login-user" value="admin" autocomplete="username">
-      </div>
-      <div class="field">
-        <label for="token">密码</label>
-        <input id="token" type="password" autocomplete="current-password">
-      </div>
-    </div>
-    <div class="btns"><button class="primary" type="button" onclick="login()">登录</button></div>
-    <p id="login-msg" class="bad"></p>
+    <div class="btns"><button class="btn primary" type="button" onclick="login()">登录</button></div>
+    <p id="login-msg" class="bad flash"></p>
   </section>
+</div>
 
-  <div id="app" style="display:none">
-    <section class="card">
-      <h2>运行状态</h2>
-      <p class="sub" id="cert-hint">正在读取状态…</p>
-      <div class="metrics">
-        <div class="metric"><b>加速站</b><span id="m-site">—</span></div>
-        <div class="metric"><b>证书</b><span id="m-cert">—</span></div>
-        <div class="metric"><b>控制台</b><span id="m-panel">—</span></div>
-      </div>
-      <p class="sub" id="edge-hint" style="margin:10px 0 12px"></p>
-      <div class="btns">
-        <button type="button" onclick="refreshOverview()">刷新状态</button>
-        <button type="button" id="btn-open-site">打开加速站</button>
-        <button type="button" onclick="copyMirror()">复制加速地址</button>
-      </div>
-    </section>
+<div id="app" class="shell ghost">
+  <aside class="sidebar">
+    <div class="brand">
+      <b>镜像加速站</b>
+      <span>控制台</span>
+    </div>
+    <div class="nav-label">概览</div>
+    <div class="nav-scroll">
+      <button class="nav-btn active" data-page="overview" type="button" onclick="showPage('overview')">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        运行概览
+      </button>
+      <span class="nav-label">配置</span>
+      <button class="nav-btn" data-page="deploy" type="button" onclick="showPage('deploy')">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+        部署参数
+      </button>
+      <button class="nav-btn" data-page="account" type="button" onclick="showPage('account')">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19c1.4-3 4-4.5 7-4.5S17.6 16 19 19"/></svg>
+        账号密码
+      </button>
+      <span class="nav-label">运维</span>
+      <button class="nav-btn" data-page="result" type="button" onclick="showPage('result')">
+        <svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h9"/></svg>
+        操作结果
+      </button>
+      <button class="nav-btn" data-page="status" type="button" onclick="showPage('status')">
+        <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>
+        容器状态
+      </button>
+      <button class="nav-btn" data-page="logs" type="button" onclick="showPage('logs')">
+        <svg viewBox="0 0 24 24"><path d="M6 4h9l5 5v11H6z"/><path d="M15 4v5h5"/></svg>
+        服务日志
+      </button>
+    </div>
+    <div class="sidebar-foot">群晖只填加速站主机名</div>
+  </aside>
 
-    <section class="card">
-      <h2>部署参数</h2>
-      <div class="row">
-        <div class="field">
-          <label for="DOMAIN">主域名</label>
-          <input id="DOMAIN" placeholder="example.com" autocomplete="off">
-        </div>
-        <div class="field">
-          <label for="SITE_ADDRESS">加速站主机名</label>
-          <input id="SITE_ADDRESS" placeholder="docker.example.com" autocomplete="off">
-        </div>
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h1 id="page-title">运行概览</h1>
+        <p id="page-sub">域名、证书和接入状态</p>
       </div>
-      <div class="row">
-        <div class="field">
-          <label for="PANEL_ADDRESS">控制台域名（可选）</label>
-          <input id="PANEL_ADDRESS" placeholder="panel.example.com" autocomplete="off">
-        </div>
-        <div class="field">
-          <label for="ACME_EMAIL">证书邮箱</label>
-          <input id="ACME_EMAIL" placeholder="admin@example.com" autocomplete="off">
-        </div>
+      <div class="who">
+        <span id="who">admin</span>
+        <button class="btn" type="button" onclick="logout()">退出</button>
       </div>
-      <div class="row">
-        <div class="field">
-          <label for="EDGE_PREFERENCE">边缘接入</label>
-          <select id="EDGE_PREFERENCE">
-            <option value="auto">自动</option>
-            <option value="behind-nginx">Nginx</option>
-            <option value="behind-caddy">Caddy</option>
-            <option value="direct">直连</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="DOCKERHUB_USERNAME">Docker Hub 用户名</label>
-          <input id="DOCKERHUB_USERNAME" autocomplete="off">
-        </div>
+    </div>
+
+    <section class="page active" id="page-overview">
+      <div class="stats">
+        <div class="stat"><b>加速站</b><strong id="m-site">—</strong><em id="cert-hint">正在读取状态…</em></div>
+        <div class="stat"><b>证书</b><strong id="m-cert">—</strong><em>Let's Encrypt / 公网探测</em></div>
+        <div class="stat"><b>控制台</b><strong id="m-panel">—</strong><em>可选独立域名</em></div>
+        <div class="stat"><b>接入</b><strong id="m-edge">—</strong><em id="edge-hint">按面板选择或自动探测</em></div>
       </div>
-      <div class="row">
-        <div class="field">
-          <label for="DOCKERHUB_PASSWORD">Docker Hub Token</label>
-          <input id="DOCKERHUB_PASSWORD" type="password" placeholder="已保存则留空不改" autocomplete="off">
+      <section class="card">
+        <h2>快捷操作</h2>
+        <p class="hint">浏览器打开加速站应是空白页，这是正常的。</p>
+        <div class="btns">
+          <button class="btn" type="button" onclick="refreshOverview()">刷新状态</button>
+          <button class="btn" type="button" id="btn-open-site">打开加速站</button>
+          <button class="btn" type="button" onclick="copyMirror()">复制加速地址</button>
         </div>
-        <div class="field">
-          <label for="HTTP_PROXY">HTTP 代理（一般不用）</label>
-          <input id="HTTP_PROXY" placeholder="留空" autocomplete="off">
-        </div>
-      </div>
-      <input id="HTTPS_PROXY" type="hidden">
-      <input id="HTTP_ONLY" type="hidden" value="true">
-      <label class="check"><input id="skip_dns" type="checkbox"> 跳过 DNS 检查</label>
-      <div class="btns">
-        <button class="primary" id="btn-deploy" type="button" onclick="deploy()">保存并部署</button>
-        <button type="button" onclick="saveOnly()">只保存</button>
-        <button type="button" onclick="checkDns()">检查 DNS</button>
-        <button type="button" onclick="health()">健康检查</button>
-        <button type="button" onclick="clientCfg()">国内怎么用</button>
-        <button class="danger" type="button" onclick="restart()">重启服务</button>
-      </div>
-      <p id="flash" class="sub" style="margin:12px 0 0">点按钮后，结果出现在下面「操作结果」。</p>
+      </section>
     </section>
 
-    <section class="card">
-      <h2>控制台账号</h2>
-      <p class="sub">改完立刻生效，下次用新账号密码登录。</p>
-      <div class="row">
-        <div class="field">
-          <label for="new-username">账号</label>
-          <input id="new-username" autocomplete="off">
+    <section class="page" id="page-deploy">
+      <section class="card">
+        <h2>部署参数</h2>
+        <p class="hint">域名不会写死在代码里。保存并部署后才会对外生效。</p>
+        <div class="row">
+          <div class="field">
+            <label for="DOMAIN">主域名</label>
+            <input id="DOMAIN" placeholder="example.com" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="SITE_ADDRESS">加速站主机名</label>
+            <input id="SITE_ADDRESS" placeholder="docker.example.com" autocomplete="off">
+          </div>
         </div>
-        <div class="field">
-          <label for="current-password">当前密码</label>
-          <input id="current-password" type="password" autocomplete="off">
+        <div class="row">
+          <div class="field">
+            <label for="PANEL_ADDRESS">控制台域名（可选）</label>
+            <input id="PANEL_ADDRESS" placeholder="panel.example.com" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="ACME_EMAIL">证书邮箱</label>
+            <input id="ACME_EMAIL" placeholder="admin@example.com" autocomplete="off">
+          </div>
         </div>
-      </div>
-      <div class="row">
-        <div class="field">
-          <label for="new-password">新密码</label>
-          <input id="new-password" type="password" autocomplete="new-password">
+        <div class="row">
+          <div class="field">
+            <label for="EDGE_PREFERENCE">边缘接入</label>
+            <select id="EDGE_PREFERENCE">
+              <option value="auto">自动</option>
+              <option value="behind-nginx">Nginx</option>
+              <option value="behind-caddy">Caddy</option>
+              <option value="direct">直连</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="DOCKERHUB_USERNAME">Docker Hub 用户名</label>
+            <input id="DOCKERHUB_USERNAME" autocomplete="off">
+          </div>
         </div>
-        <div class="field">
-          <label for="new-password2">再输一次新密码</label>
-          <input id="new-password2" type="password" autocomplete="new-password">
+        <div class="row">
+          <div class="field">
+            <label for="DOCKERHUB_PASSWORD">Docker Hub Token</label>
+            <input id="DOCKERHUB_PASSWORD" type="password" placeholder="已保存则留空不改" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="HTTP_PROXY">HTTP 代理（一般不用）</label>
+            <input id="HTTP_PROXY" placeholder="留空" autocomplete="off">
+          </div>
         </div>
-      </div>
-      <div class="btns">
-        <button class="primary" type="button" onclick="changeAccount()">保存账号密码</button>
-      </div>
+        <input id="HTTPS_PROXY" type="hidden">
+        <input id="HTTP_ONLY" type="hidden" value="true">
+        <label class="check"><input id="skip_dns" type="checkbox"> 跳过 DNS 检查</label>
+        <div class="btns">
+          <button class="btn primary" id="btn-deploy" type="button" onclick="deploy()">保存并部署</button>
+          <button class="btn" type="button" onclick="saveOnly()">只保存</button>
+          <button class="btn" type="button" onclick="checkDns()">检查 DNS</button>
+          <button class="btn" type="button" onclick="health()">健康检查</button>
+          <button class="btn" type="button" onclick="clientCfg()">国内怎么用</button>
+          <button class="btn danger" type="button" onclick="restart()">重启服务</button>
+        </div>
+        <p id="flash" class="hint flash">点按钮后，结果出现在「操作结果」。</p>
+      </section>
     </section>
 
-    <section class="card" id="result-card">
-      <h2>操作结果</h2>
-      <pre id="job">还没有操作。</pre>
+    <section class="page" id="page-account">
+      <section class="card">
+        <h2>控制台账号</h2>
+        <p class="hint">改完立刻写入本机。如果提示 not found，先跑升级命令重启控制台。</p>
+        <div class="row">
+          <div class="field">
+            <label for="new-username">账号</label>
+            <input id="new-username" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="current-password">当前密码</label>
+            <input id="current-password" type="password" autocomplete="off">
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="new-password">新密码</label>
+            <input id="new-password" type="password" autocomplete="new-password">
+          </div>
+          <div class="field">
+            <label for="new-password2">再输一次新密码</label>
+            <input id="new-password2" type="password" autocomplete="new-password">
+          </div>
+        </div>
+        <div class="btns">
+          <button class="btn primary" type="button" onclick="changeAccount()">保存账号密码</button>
+        </div>
+      </section>
     </section>
-    <section class="card">
-      <h2>容器状态</h2>
-      <pre id="status">(尚未加载)</pre>
+
+    <section class="page" id="page-result">
+      <section class="card" id="result-card">
+        <h2>操作结果</h2>
+        <pre id="job">还没有操作。</pre>
+      </section>
     </section>
-    <section class="card">
-      <h2>服务日志</h2>
-      <div class="btns" style="margin-bottom:10px">
-        <button type="button" onclick="logs('caddy')">内部路由</button>
-        <button type="button" onclick="logs('edge')">边缘证书</button>
-        <button type="button" onclick="logs('registry-dockerhub')">dockerhub</button>
-      </div>
-      <pre id="logs">(空)</pre>
+
+    <section class="page" id="page-status">
+      <section class="card">
+        <h2>容器状态</h2>
+        <pre id="status">(尚未加载)</pre>
+      </section>
     </section>
-  </div>
-</main>
+
+    <section class="page" id="page-logs">
+      <section class="card">
+        <h2>服务日志</h2>
+        <div class="btns" style="margin-bottom:12px">
+          <button class="btn" type="button" onclick="logs('caddy')">内部路由</button>
+          <button class="btn" type="button" onclick="logs('edge')">边缘证书</button>
+          <button class="btn" type="button" onclick="logs('registry-dockerhub')">dockerhub</button>
+        </div>
+        <pre id="logs">(空)</pre>
+      </section>
+    </section>
+  </main>
+</div>
+
 <script>
 let TOKEN = localStorage.getItem("mirror_panel_token") || "";
 let USERNAME = localStorage.getItem("mirror_panel_user") || "admin";
 const $ = (id) => document.getElementById(id);
+const TITLES = {
+  overview: ["运行概览", "域名、证书和接入状态"],
+  deploy: ["部署参数", "域名、邮箱和边缘接入都在这里填"],
+  account: ["账号密码", "只改控制台登录，不影响 Docker Hub"],
+  result: ["操作结果", "部署、检查、改账号的输出都在这里"],
+  status: ["容器状态", "本机 docker compose ps"],
+  logs: ["服务日志", "最近 120 行"]
+};
+
+function showPage(name) {
+  document.querySelectorAll(".page").forEach((el) => el.classList.toggle("active", el.id === "page-" + name));
+  document.querySelectorAll(".nav-btn").forEach((el) => el.classList.toggle("active", el.dataset.page === name));
+  const t = TITLES[name] || ["控制台", ""];
+  $("page-title").textContent = t[0];
+  $("page-sub").textContent = t[1];
+}
 
 function showResult(text, kind) {
   const el = $("job");
@@ -244,10 +434,9 @@ function showResult(text, kind) {
   if (flash) {
     const first = (text || "").split("\n").filter(Boolean)[0] || "已更新结果";
     flash.textContent = first;
-    flash.className = kind || (/失败|错误|ERROR|FAIL/.test(first) ? "bad" : "ok");
+    flash.className = "flash " + (kind || (/失败|错误|ERROR|FAIL|not found/.test(first) ? "bad" : "ok"));
   }
-  const card = $("result-card");
-  if (card) card.scrollIntoView({behavior: "smooth", block: "start"});
+  showPage("result");
 }
 
 async function api(path, opt={}) {
@@ -260,6 +449,7 @@ async function api(path, opt={}) {
   try { data = JSON.parse(text); } catch { data = {raw: text, status: res.status}; }
   if (res.status === 401) throw new Error(data.error || "密码错误或未登录");
   if (!res.ok && data.error) throw new Error(data.error);
+  if (res.status === 404) throw new Error("控制台还是旧进程，请先跑升级命令");
   return data;
 }
 
@@ -294,9 +484,8 @@ function logout() {
 async function boot() {
   try {
     const cfg = await api("/api/config");
-    $("login-card").style.display = "none";
-    $("app").style.display = "block";
-    $("who-box").style.display = "block";
+    $("login-screen").classList.add("ghost");
+    $("app").classList.remove("ghost");
     USERNAME = cfg.PANEL_USERNAME || USERNAME;
     $("who").textContent = USERNAME;
     $("new-username").value = USERNAME;
@@ -309,9 +498,8 @@ async function boot() {
     pollJob();
   } catch (e) {
     $("login-msg").textContent = e.message;
-    $("login-card").style.display = "block";
-    $("app").style.display = "none";
-    $("who-box").style.display = "none";
+    $("login-screen").classList.remove("ghost");
+    $("app").classList.add("ghost");
   }
 }
 
@@ -359,45 +547,46 @@ async function refreshOverview() {
       "behind-nginx": "Nginx",
       "behind-caddy": "Caddy",
       "direct": "直连",
-      "behind-unknown": "80 被其它进程占用"
+      "behind-unknown": "其它占用"
     })[edge] || edge;
-    if ($("edge-hint")) $("edge-hint").textContent = "当前接入：" + edgeText + "（面板选择：" + pref + "）";
+    $("m-edge").textContent = edgeText;
+    $("edge-hint").textContent = "面板选择：" + pref;
     const panelHost = kv.panel || ($("PANEL_ADDRESS") && $("PANEL_ADDRESS").value) || "";
     if (kv.panel_https === "ok") {
-      $("m-panel").textContent = "https://" + panelHost;
+      $("m-panel").textContent = panelHost;
       $("m-panel").className = "ok";
     } else if (panelHost) {
-      $("m-panel").textContent = panelHost + "（DNS 指过来后自动签证书）";
+      $("m-panel").textContent = panelHost;
     } else {
-      $("m-panel").textContent = "未设置，使用 IP:端口";
+      $("m-panel").textContent = "IP:端口";
     }
-    let certText = "还没探测到";
+    let certText = "未探测";
     let hint = "";
     if (kv.cert_ok === "yes") {
-      certText = "Let's Encrypt 已生效";
-      hint = "加速站 https://" + (kv.site || "") + " 证书正常。浏览器打开加速站应是空白页。";
+      certText = "已生效";
+      hint = "证书正常。浏览器打开加速站应是空白页。";
       $("m-cert").className = "ok";
     } else if (kv.public_https === "ok") {
-      certText = kv.cert_issuer || "已能打开 HTTPS";
-      hint = "站点能打开。颁发者：" + (kv.cert_issuer || "不明");
+      certText = kv.cert_issuer || "可访问";
+      hint = "颁发者：" + (kv.cert_issuer || "不明");
       $("m-cert").className = "ok";
     } else if (kv.public_https === "redirect") {
       certText = "还在跳转";
-      hint = "公网在 301/308。Cloudflare 必须关闭代理（灰云）。";
+      hint = "Cloudflare 必须关闭代理（灰云）。";
       $("m-cert").className = "warn";
     } else {
       certText = "未生效";
-      hint = "先填加速站主机名，再点保存并部署。";
+      hint = "填加速站主机名后点保存并部署。";
       $("m-cert").className = "bad";
     }
-    if (kv.cert_not_after) certText += " · 到期 " + kv.cert_not_after;
+    if (kv.cert_not_after) certText += " · " + kv.cert_not_after;
     $("m-cert").textContent = certText;
     $("cert-hint").textContent = hint;
     const site = kv.site || $("SITE_ADDRESS").value;
     const open = $("btn-open-site");
     open.onclick = () => { if (site) window.open("https://" + site + "/", "_blank"); };
   } catch (e) {
-    $("m-cert").textContent = "读证书失败";
+    $("m-cert").textContent = "读失败";
     $("cert-hint").textContent = e.message;
   }
 }
@@ -462,7 +651,10 @@ async function deploy() {
 async function pollJob() {
   try {
     const r = await api("/api/job");
-    if (r.log) showResult(r.log, r.ok === false ? "bad" : "ok");
+    if (r.log) {
+      $("job").textContent = r.log;
+      if (!r.running) showPage("result");
+    }
     if (r.running) setTimeout(pollJob, 1500);
     else refreshOverview();
   } catch (e) { showResult("读取任务日志失败：" + e.message, "bad"); }
@@ -494,6 +686,7 @@ async function logs(svc) {
   try {
     const r = await api("/api/logs?service=" + encodeURIComponent(svc || "caddy"));
     $("logs").textContent = r.output || r.error || "(空)";
+    showPage("logs");
   } catch (e) { $("logs").textContent = "读日志失败：" + e.message; }
 }
 async function restart() {

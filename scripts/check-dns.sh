@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# 检查加速站相关域名是否都解析到这台美国服务器
+# 只强制检查「加速站主机名」。其余子域名有则报 OK，没有只警告。
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
@@ -18,7 +18,7 @@ set +a
 DOMAIN="${DOMAIN:-}"
 SITE_ADDRESS="${SITE_ADDRESS:-}"
 
-if [ -z "$DOMAIN" ] || [ -z "$SITE_ADDRESS" ] || [ "$SITE_ADDRESS" = ":80" ]; then
+if [ -z "$SITE_ADDRESS" ] || [ "$SITE_ADDRESS" = ":80" ]; then
   echo "当前是 HTTP/无域名模式，不用查 DNS。"
   exit 0
 fi
@@ -43,42 +43,52 @@ if [ -z "$public_ip" ]; then
 fi
 
 echo "本机公网 IPv4：${public_ip:-未知}"
-echo "需要解析到这台机器的记录："
+echo "必查（用来签证书的加速站主机名）："
 echo
 
-ok=0
-fail=0
-for name in \
-  "$SITE_ADDRESS" \
-  "docker.${DOMAIN}" \
-  "ghcr.${DOMAIN}" \
-  "gcr.${DOMAIN}" \
-  "quay.${DOMAIN}" \
-  "k8s.${DOMAIN}" \
-  "nvcr.${DOMAIN}" \
-  "mcr.${DOMAIN}"
-do
-  ip="$(lookup "$name")"
-  if [ -z "$ip" ]; then
-    printf '  [缺]  %-40s  未解析\n' "$name"
-    fail=$((fail + 1))
-  elif [ -n "$public_ip" ] && [ "$ip" != "$public_ip" ]; then
-    printf '  [偏]  %-40s  %s  (不是本机 %s)\n' "$name" "$ip" "$public_ip"
-    fail=$((fail + 1))
-  else
-    printf '  [OK]  %-40s  %s\n' "$name" "$ip"
-    ok=$((ok + 1))
-  fi
-done
-
-echo
-echo "DNS 控制台请加 A 记录（值填美国服务器公网 IP）："
-echo "  mirror / docker / ghcr / gcr / quay / k8s / nvcr / mcr"
-echo "或者一条泛域名：  *   A   <美国服务器IP>"
-echo "TTL 先设 60 秒，改完等生效再 ./scripts/deploy.sh"
-echo
-if [ "$fail" -gt 0 ]; then
-  echo "还有 ${fail} 条未就绪。证书签发依赖这些域名先指向本机 80/443。"
+site_ip="$(lookup "$SITE_ADDRESS")"
+if [ -z "$site_ip" ]; then
+  printf '  [缺]  %-40s  未解析\n' "$SITE_ADDRESS"
+  echo
+  echo "请把 ${SITE_ADDRESS} 的 A 记录指到这台美国服务器 IP。"
+  echo "Cloudflare 必须关闭橙色云（仅 DNS）。"
   exit 1
 fi
-echo "DNS 已就绪（${ok} 条）。可以部署。"
+
+if [ -n "$public_ip" ] && [ "$site_ip" != "$public_ip" ]; then
+  printf '  [偏]  %-40s  %s  (不是本机 %s)\n' "$SITE_ADDRESS" "$site_ip" "$public_ip"
+  echo
+  echo "解析到了别的机器。确认 A 记录、关 Cloudflare 代理后再部署。"
+  exit 1
+fi
+
+printf '  [OK]  %-40s  %s\n' "$SITE_ADDRESS" "$site_ip"
+
+if [ -n "$DOMAIN" ]; then
+  echo
+  echo "可选子域名（没有也不影响 Docker Hub 加速）："
+  for name in \
+    "docker.${DOMAIN}" \
+    "ghcr.${DOMAIN}" \
+    "gcr.${DOMAIN}" \
+    "quay.${DOMAIN}" \
+    "k8s.${DOMAIN}" \
+    "nvcr.${DOMAIN}" \
+    "mcr.${DOMAIN}" \
+    "mirror.${DOMAIN}"
+  do
+    [ "$name" = "$SITE_ADDRESS" ] && continue
+    ip="$(lookup "$name")"
+    if [ -z "$ip" ]; then
+      printf '  [--]  %-40s  未解析（可以后再加）\n' "$name"
+    elif [ -n "$public_ip" ] && [ "$ip" != "$public_ip" ]; then
+      printf '  [偏]  %-40s  %s\n' "$name" "$ip"
+    else
+      printf '  [OK]  %-40s  %s\n' "$name" "$ip"
+    fi
+  done
+fi
+
+echo
+echo "主入口 DNS 已就绪，可以部署。"
+echo "国内 / 群晖请填： https://${SITE_ADDRESS}"

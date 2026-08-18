@@ -319,7 +319,7 @@ PAGE = r"""<!DOCTYPE html>
       </div>
       <label class="check"><input id="skip_dns" type="checkbox"> 跳过 DNS 检查（解析未生效时临时用，证书仍可能失败）</label>
       <div class="btns">
-        <button class="primary" onclick="deploy()">保存并部署</button>
+        <button class="primary" id="btn-deploy" onclick="deploy()">保存并部署</button>
         <button class="ghost" onclick="saveOnly()">只保存</button>
         <button class="ghost" onclick="checkDns()">检查 DNS</button>
         <button class="ghost" onclick="health()">健康检查</button>
@@ -327,6 +327,7 @@ PAGE = r"""<!DOCTYPE html>
         <button class="ghost" onclick="refreshStatus()">刷新状态</button>
         <button class="danger" onclick="restart()">重启服务</button>
       </div>
+      <p id="flash" class="sub" style="margin:12px 0 0">点「保存并部署」后，进度会出现在这里和下面的任务日志。</p>
     </section>
 
     <section class="card">
@@ -351,10 +352,26 @@ PAGE = r"""<!DOCTYPE html>
 let TOKEN = localStorage.getItem("mirror_panel_token") || "";
 const $ = (id) => document.getElementById(id);
 
+function setJob(text) {
+  const el = $("job");
+  if (el) el.textContent = text || "(空)";
+  const flash = $("flash");
+  if (flash) {
+    const first = (text || "").split("\n").filter(Boolean)[0] || "";
+    flash.textContent = first || "已更新任务日志，请往下看。";
+    flash.className = first.indexOf("失败") >= 0 || first.indexOf("错误") >= 0 ? "bad" : "ok";
+  }
+}
+
 async function api(path, opt={}) {
   const headers = Object.assign({"Authorization": "Bearer " + TOKEN}, opt.headers || {});
-  const res = await fetch(path, Object.assign({}, opt, {headers}));
-  if (res.status === 401) throw new Error("密码错误或未登录");
+  let res;
+  try {
+    res = await fetch(path, Object.assign({}, opt, {headers}));
+  } catch (e) {
+    throw new Error("请求没发出去：" + e.message);
+  }
+  if (res.status === 401) throw new Error("密码错误或未登录，请刷新页面重新登录");
   const text = await res.text();
   try { return JSON.parse(text); } catch { return {raw: text, status: res.status}; }
 }
@@ -401,56 +418,102 @@ function formPayload() {
 }
 
 async function saveOnly() {
-  const r = await api("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(formPayload())});
-  $("job").textContent = r.ok ? "已保存 .env，尚未部署。" : (r.error || "保存失败");
+  try {
+    const r = await api("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(formPayload())});
+    setJob(r.ok ? "已保存配置，还没有部署。" : (r.error || "保存失败"));
+  } catch (e) {
+    setJob("保存失败：" + e.message);
+  }
 }
 
 async function deploy() {
-  $("job").textContent = "开始部署...";
-  const r = await api("/api/deploy", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(formPayload())});
-  if (r.error) { $("job").textContent = r.error; return; }
-  pollJob();
+  const btn = $("btn-deploy");
+  if (btn) btn.disabled = true;
+  setJob("正在提交部署任务，请稍候...");
+  try {
+    const r = await api("/api/deploy", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(formPayload())});
+    if (r.error) { setJob("部署没有开始：" + r.error); return; }
+    setJob("任务已提交，正在拉取镜像并申请证书...");
+    pollJob();
+  } catch (e) {
+    setJob("部署失败：" + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function pollJob() {
-  const r = await api("/api/job");
-  $("job").textContent = r.log || "(空)";
-  if (r.running) setTimeout(pollJob, 1500);
-  else refreshStatus();
+  try {
+    const r = await api("/api/job");
+    setJob(r.log || "任务已提交，等待日志...");
+    if (r.running) setTimeout(pollJob, 1500);
+    else refreshStatus();
+  } catch (e) {
+    setJob("读取任务日志失败：" + e.message);
+  }
 }
 
 async function checkDns() {
-  await saveOnly();
-  const r = await api("/api/dns");
-  $("job").textContent = r.output || r.error;
+  try {
+    await saveOnly();
+    setJob("正在检查 DNS...");
+    const r = await api("/api/dns");
+    setJob(r.output || r.error || "DNS 检查无输出");
+  } catch (e) {
+    setJob("DNS 检查失败：" + e.message);
+  }
 }
 async function health() {
-  const r = await api("/api/health");
-  $("job").textContent = r.output || r.error;
+  try {
+    setJob("正在做健康检查...");
+    const r = await api("/api/health");
+    setJob(r.output || r.error || "健康检查无输出");
+  } catch (e) {
+    setJob("健康检查失败：" + e.message);
+  }
 }
 async function clientCfg() {
-  const r = await api("/api/client");
-  $("job").textContent = r.output || r.error;
+  try {
+    const r = await api("/api/client");
+    setJob(r.output || r.error || "无输出");
+  } catch (e) {
+    setJob("读取客户端配置失败：" + e.message);
+  }
 }
 async function refreshStatus() {
-  const r = await api("/api/status");
-  $("status").textContent = r.output || r.error || "(空)";
+  try {
+    const r = await api("/api/status");
+    $("status").textContent = r.output || r.error || "(空)";
+  } catch (e) {
+    $("status").textContent = "读取状态失败：" + e.message;
+  }
 }
 async function logs(svc) {
-  const r = await api("/api/logs?service=" + encodeURIComponent(svc || "caddy"));
-  $("logs").textContent = r.output || r.error;
+  try {
+    const r = await api("/api/logs?service=" + encodeURIComponent(svc || "caddy"));
+    $("logs").textContent = r.output || r.error;
+  } catch (e) {
+    $("logs").textContent = "读日志失败：" + e.message;
+  }
 }
 async function restart() {
   if (!confirm("确定重启加速站容器？")) return;
-  const r = await api("/api/restart", {method:"POST"});
-  $("job").textContent = r.output || r.error;
-  refreshStatus();
+  try {
+    const r = await api("/api/restart", {method:"POST"});
+    setJob(r.output || r.error || "已发送重启");
+    refreshStatus();
+  } catch (e) {
+    setJob("重启失败：" + e.message);
+  }
 }
 
-$("DOMAIN").addEventListener("blur", () => {
-  const d = $("DOMAIN").value.trim().replace(/^https?:\/\//,"").replace(/\/$/,"");
-  if (d && !$("SITE_ADDRESS").value.trim()) $("SITE_ADDRESS").value = "mirror." + d.replace(/^mirror\./,"");
-});
+const domainEl = $("DOMAIN");
+if (domainEl) {
+  domainEl.addEventListener("blur", () => {
+    const d = $("DOMAIN").value.trim().replace(/^https?:\/\//,"").replace(/\/$/,"");
+    if (d && !$("SITE_ADDRESS").value.trim()) $("SITE_ADDRESS").value = "mirror." + d.replace(/^mirror\./,"");
+  });
+}
 
 if (TOKEN) boot();
 </script>
@@ -477,7 +540,12 @@ class Handler(BaseHTTPRequestHandler):
                 jar.load(raw)
                 if "token" in jar:
                     token = jar["token"].value
-        return secrets.compare_digest(token, TOKEN)
+        if not token:
+            return False
+        try:
+            return secrets.compare_digest(token, TOKEN)
+        except Exception:
+            return False
 
     def _json(self, code: int, payload: dict) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")

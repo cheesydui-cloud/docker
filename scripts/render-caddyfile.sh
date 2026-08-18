@@ -114,7 +114,9 @@ EOF
     site_common
     echo "}"
 
-    if [ -n "$DOMAIN" ]; then
+    # 默认只给「加速站主机名」签证书，避免未解析的 ghcr/k8s 拖垮 Caddy。
+    # 需要全部子域名时，在 .env 设 ENABLE_ALL_SUBDOMAINS=true
+    if [ -n "$DOMAIN" ] && [ "${ENABLE_ALL_SUBDOMAINS:-false}" = "true" ]; then
       for pair in \
         "docker:registry-dockerhub" \
         "ghcr:registry-ghcr" \
@@ -126,8 +128,12 @@ EOF
       do
         name="${pair%%:*}"
         backend="${pair##*:}"
+        host="${name}.${DOMAIN}"
+        if [ "$host" = "$SITE_ADDRESS" ]; then
+          continue
+        fi
         echo
-        echo "${name}.${DOMAIN} {"
+        echo "${host} {"
         proxy_block "$backend"
         echo "}"
       done

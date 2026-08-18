@@ -62,9 +62,15 @@ sh scripts/render-caddyfile.sh >/dev/null
 sh scripts/render-site.sh >/dev/null
 
 if grep -q 'mirror.example.test' caddy/Caddyfile; then ok "Caddyfile 主站"; else fail "Caddyfile 未包含主站"; fi
-if grep -q 'ghcr.example.test' caddy/Caddyfile; then ok "Caddyfile ghcr"; else fail "Caddyfile 未包含 ghcr 子域名"; fi
-if grep -q 'k8s.example.test' caddy/Caddyfile; then ok "Caddyfile k8s"; else fail "Caddyfile 未包含 k8s 子域名"; fi
 if grep -q 'registry-dockerhub:5000' caddy/Caddyfile; then ok "Caddyfile 反代 dockerhub"; else fail "Caddyfile 未反代 dockerhub"; fi
+if grep -q 'ghcr.example.test' caddy/Caddyfile; then fail "默认不应生成未解析的 ghcr 站点"; else ok "默认不生成多余子域名"; fi
+ENABLE_ALL_SUBDOMAINS=true sh scripts/render-caddyfile.sh >/dev/null
+if grep -q 'ghcr.example.test' caddy/Caddyfile && grep -q 'k8s.example.test' caddy/Caddyfile; then
+  ok "开启 ENABLE_ALL_SUBDOMAINS 后生成子域名"
+else
+  fail "ENABLE_ALL_SUBDOMAINS 未生成子域名"
+fi
+SITE_ADDRESS=mirror.example.test DOMAIN=example.test HTTP_ONLY=false ENABLE_ALL_SUBDOMAINS=false sh scripts/render-caddyfile.sh >/dev/null
 if grep -q 'https://mirror.example.test' www/index.html; then ok "首页加速地址"; else fail "首页未写入加速地址"; fi
 if grep -q 'ghcr.example.test' www/index.html; then ok "首页 ghcr 前缀"; else fail "首页未写入 ghcr 前缀"; fi
 

@@ -197,6 +197,15 @@ def write_env(values: dict) -> None:
     ENV_FILE.write_text("\n".join(lines), encoding="utf-8")
 
 
+def load_version() -> str:
+    path = ROOT / "VERSION"
+    if path.is_file():
+        ver = path.read_text(encoding="utf-8").strip()
+        if ver:
+            return ver if ver.startswith("v") else "v" + ver
+    return "v0"
+
+
 def public_config() -> dict:
     data = load_env()
     pwd = data.get("DOCKERHUB_PASSWORD") or ""
@@ -205,6 +214,7 @@ def public_config() -> dict:
     data["panel_port"] = PORT
     data["EDGE_PREFERENCE"] = data.get("EDGE_PREFERENCE") or "auto"
     data["PANEL_USERNAME"] = load_username()
+    data["VERSION"] = load_version()
     return data
 
 

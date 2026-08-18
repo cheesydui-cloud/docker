@@ -76,8 +76,7 @@
       gap: 16px;
       margin-bottom: 18px;
     }
-    .topbar h1 { margin: 0 0 6px; font-size: 26px; font-weight: 650; letter-spacing: -.03em; }
-    .topbar p { margin: 0; color: var(--muted); }
+    .topbar h1 { margin: 0; font-size: 26px; font-weight: 650; letter-spacing: -.03em; }
     .who {
       display: flex;
       align-items: center;
@@ -117,8 +116,8 @@
       padding: 20px 22px;
       margin-bottom: 14px;
     }
-    .card h2 { margin: 0 0 6px; font-size: 16px; }
-    .hint { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+    .card h2 { margin: 0 0 16px; font-size: 16px; }
+    .flash { min-height: 0; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     .field { margin-bottom: 14px; }
     label { display: block; margin: 0 0 6px; color: #4d443c; font-size: 13px; }
@@ -202,7 +201,6 @@
 <div id="login-screen" class="login-wrap">
   <section class="login-card">
     <h1>控制台登录</h1>
-    <p class="hint">默认账号 admin，密码在安装结束时打印，也在 <code>panel/.secret</code></p>
     <div class="field">
       <label for="login-user">账号</label>
       <input id="login-user" value="admin" autocomplete="username">
@@ -233,10 +231,6 @@
         <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
         部署参数
       </button>
-      <button class="nav-btn" data-page="account" type="button" onclick="showPage('account')">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 19c1.4-3 4-4.5 7-4.5S17.6 16 19 19"/></svg>
-        账号密码
-      </button>
       <span class="nav-label">运维</span>
       <button class="nav-btn" data-page="result" type="button" onclick="showPage('result')">
         <svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h9"/></svg>
@@ -250,15 +244,19 @@
         <svg viewBox="0 0 24 24"><path d="M6 4h9l5 5v11H6z"/><path d="M15 4v5h5"/></svg>
         服务日志
       </button>
+      <span class="nav-label">系统</span>
+      <button class="nav-btn" data-page="settings" type="button" onclick="showPage('settings')">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c.3.7 1 1.1 1.7 1.1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        系统设置
+      </button>
     </div>
-    <div class="sidebar-foot">群晖只填加速站主机名</div>
+    <div class="sidebar-foot" id="app-version">v1.1.9</div>
   </aside>
 
   <main class="main">
     <div class="topbar">
       <div>
         <h1 id="page-title">运行概览</h1>
-        <p id="page-sub">域名、证书和接入状态</p>
       </div>
       <div class="who">
         <span id="who">admin</span>
@@ -268,14 +266,13 @@
 
     <section class="page active" id="page-overview">
       <div class="stats">
-        <div class="stat"><b>加速站</b><strong id="m-site">—</strong><em id="cert-hint">正在读取状态…</em></div>
-        <div class="stat"><b>证书</b><strong id="m-cert">—</strong><em>Let's Encrypt / 公网探测</em></div>
-        <div class="stat"><b>控制台</b><strong id="m-panel">—</strong><em>可选独立域名</em></div>
-        <div class="stat"><b>接入</b><strong id="m-edge">—</strong><em id="edge-hint">按面板选择或自动探测</em></div>
+        <div class="stat"><b>加速站</b><strong id="m-site">—</strong></div>
+        <div class="stat"><b>证书</b><strong id="m-cert">—</strong></div>
+        <div class="stat"><b>控制台</b><strong id="m-panel">—</strong></div>
+        <div class="stat"><b>接入</b><strong id="m-edge">—</strong></div>
       </div>
       <section class="card">
         <h2>快捷操作</h2>
-        <p class="hint">浏览器打开加速站应是空白页，这是正常的。</p>
         <div class="btns">
           <button class="btn" type="button" onclick="refreshOverview()">刷新状态</button>
           <button class="btn" type="button" id="btn-open-site">打开加速站</button>
@@ -287,7 +284,6 @@
     <section class="page" id="page-deploy">
       <section class="card">
         <h2>部署参数</h2>
-        <p class="hint">域名不会写死在代码里。保存并部署后才会对外生效。</p>
         <div class="row">
           <div class="field">
             <label for="DOMAIN">主域名</label>
@@ -344,14 +340,13 @@
           <button class="btn" type="button" onclick="clientCfg()">国内怎么用</button>
           <button class="btn danger" type="button" onclick="restart()">重启服务</button>
         </div>
-        <p id="flash" class="hint flash">点按钮后，结果出现在「操作结果」。</p>
+        <p id="flash" class="flash"></p>
       </section>
     </section>
 
-    <section class="page" id="page-account">
+    <section class="page" id="page-settings">
       <section class="card">
-        <h2>控制台账号</h2>
-        <p class="hint">改完立刻写入本机。如果提示 not found，先跑升级命令重启控制台。</p>
+        <h2>账号密码</h2>
         <div class="row">
           <div class="field">
             <label for="new-username">账号</label>
@@ -411,20 +406,18 @@ let TOKEN = localStorage.getItem("mirror_panel_token") || "";
 let USERNAME = localStorage.getItem("mirror_panel_user") || "admin";
 const $ = (id) => document.getElementById(id);
 const TITLES = {
-  overview: ["运行概览", "域名、证书和接入状态"],
-  deploy: ["部署参数", "域名、邮箱和边缘接入都在这里填"],
-  account: ["账号密码", "只改控制台登录，不影响 Docker Hub"],
-  result: ["操作结果", "部署、检查、改账号的输出都在这里"],
-  status: ["容器状态", "本机 docker compose ps"],
-  logs: ["服务日志", "最近 120 行"]
+  overview: "运行概览",
+  deploy: "部署参数",
+  settings: "系统设置",
+  result: "操作结果",
+  status: "容器状态",
+  logs: "服务日志"
 };
 
 function showPage(name) {
   document.querySelectorAll(".page").forEach((el) => el.classList.toggle("active", el.id === "page-" + name));
   document.querySelectorAll(".nav-btn").forEach((el) => el.classList.toggle("active", el.dataset.page === name));
-  const t = TITLES[name] || ["控制台", ""];
-  $("page-title").textContent = t[0];
-  $("page-sub").textContent = t[1];
+  $("page-title").textContent = TITLES[name] || "控制台";
 }
 
 function showResult(text, kind) {
@@ -494,6 +487,7 @@ async function boot() {
       if (cfg[k] !== undefined && $(k)) $(k).value = cfg[k];
     }
     $("DOCKERHUB_PASSWORD").placeholder = cfg.DOCKERHUB_PASSWORD_SET ? "已保存，留空不改" : "建议填写 Access Token";
+    if (cfg.VERSION && $("app-version")) $("app-version").textContent = cfg.VERSION;
     refreshOverview();
     pollJob();
   } catch (e) {
@@ -542,7 +536,6 @@ async function refreshOverview() {
     const kv = parseKv(r.output || "");
     $("m-site").textContent = kv.site || $("SITE_ADDRESS").value || "未设置";
     const edge = kv.edge_mode || "未探测";
-    const pref = kv.edge_preference || ($("EDGE_PREFERENCE") && $("EDGE_PREFERENCE").value) || "auto";
     const edgeText = ({
       "behind-nginx": "Nginx",
       "behind-caddy": "Caddy",
@@ -550,7 +543,6 @@ async function refreshOverview() {
       "behind-unknown": "其它占用"
     })[edge] || edge;
     $("m-edge").textContent = edgeText;
-    $("edge-hint").textContent = "面板选择：" + pref;
     const panelHost = kv.panel || ($("PANEL_ADDRESS") && $("PANEL_ADDRESS").value) || "";
     if (kv.panel_https === "ok") {
       $("m-panel").textContent = panelHost;
@@ -561,33 +553,29 @@ async function refreshOverview() {
       $("m-panel").textContent = "IP:端口";
     }
     let certText = "未探测";
-    let hint = "";
     if (kv.cert_ok === "yes") {
       certText = "已生效";
-      hint = "证书正常。浏览器打开加速站应是空白页。";
       $("m-cert").className = "ok";
     } else if (kv.public_https === "ok") {
-      certText = kv.cert_issuer || "可访问";
-      hint = "颁发者：" + (kv.cert_issuer || "不明");
+      certText = "可访问";
       $("m-cert").className = "ok";
     } else if (kv.public_https === "redirect") {
       certText = "还在跳转";
-      hint = "Cloudflare 必须关闭代理（灰云）。";
       $("m-cert").className = "warn";
     } else {
       certText = "未生效";
-      hint = "填加速站主机名后点保存并部署。";
       $("m-cert").className = "bad";
     }
-    if (kv.cert_not_after) certText += " · " + kv.cert_not_after;
+    if (kv.cert_not_after) {
+      const shortDate = String(kv.cert_not_after).replace(/\s+GMT.*/i, "").replace(/\s+\d{2}:\d{2}:\d{2}.*/, "");
+      certText += " · " + shortDate;
+    }
     $("m-cert").textContent = certText;
-    $("cert-hint").textContent = hint;
     const site = kv.site || $("SITE_ADDRESS").value;
     const open = $("btn-open-site");
     open.onclick = () => { if (site) window.open("https://" + site + "/", "_blank"); };
   } catch (e) {
     $("m-cert").textContent = "读失败";
-    $("cert-hint").textContent = e.message;
   }
 }
 

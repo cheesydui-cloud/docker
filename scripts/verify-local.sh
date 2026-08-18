@@ -134,15 +134,25 @@ if grep -q '3x-ui' panel/index.html || grep -q '宿主机' panel/index.html; the
 else
   ok "下拉文案已去掉多余说明"
 fi
-if grep -q '/api/account' panel/app.py && grep -q '/api/account' panel/index.html && grep -q 'id="new-username"' panel/index.html; then
-  ok "面板可改账号密码"
+if grep -q '/api/account' panel/app.py && grep -q '/api/account' panel/index.html && grep -q 'id="new-username"' panel/index.html && grep -q '系统设置' panel/index.html && ! grep -q 'data-page="account"' panel/index.html; then
+  ok "账号密码在系统设置里"
 else
-  fail "缺少改账号密码"
+  fail "账号密码未并入系统设置"
 fi
 if grep -q 'class="sidebar"' panel/index.html && grep -q 'showPage(' panel/index.html && grep -q '运行概览' panel/index.html; then
   ok "控制台是侧边栏布局"
 else
   fail "控制台还不是侧边栏"
+fi
+if grep -q 'id="app-version"' panel/index.html && grep -q 'load_version' panel/app.py && [ -f VERSION ]; then
+  ok "侧栏显示版本号"
+else
+  fail "缺少版本号"
+fi
+if grep -q 'panel/.secret' panel/index.html || grep -q '群晖只填加速站主机名' panel/index.html || grep -q '域名、证书和接入状态' panel/index.html; then
+  fail "页面仍有圈出的说明文案"
+else
+  ok "圈出的说明文案已去掉"
 fi
 if grep -q 'systemctl restart docker-mirror-panel' scripts/start-panel.sh && grep -q '重启控制台' scripts/upgrade.sh; then
   ok "升级会强制重启控制台进程"

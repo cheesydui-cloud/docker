@@ -58,10 +58,15 @@ if [ -f "$ROOT/.env" ]; then
   set +a
   panel_host="${PANEL_ADDRESS:-}"
 fi
+user="admin"
+if [ -f "$ROOT/panel/.user" ]; then
+  user="$(tr -d '\n' < "$ROOT/panel/.user")"
+fi
 echo
 echo "打开控制台： http://${ip:-<服务器IP>}:${PORT}/"
 if [ -n "$panel_host" ]; then
   echo "域名后台：   https://${panel_host}/   （DNS 指到本机并部署后生效）"
 fi
+echo "面板账号：   ${user:-admin}"
 echo "面板密码：   ${secret:-（看 $ROOT/panel/.secret）}"
-echo "安全组请放行 TCP ${PORT}，建议只对自己家里的 IP 开放。域名后台走 443，可不再对公网开 8088。"
+echo "可在控制台里改账号密码。安全组请放行 TCP ${PORT}，建议只对自己家里的 IP 开放。"

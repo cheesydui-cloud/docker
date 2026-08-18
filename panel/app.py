@@ -2,6 +2,7 @@
 """Docker 镜像加速站控制面板（仅标准库）。"""
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import secrets
@@ -15,6 +16,7 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(os.environ.get("MIRROR_ROOT", Path(__file__).resolve().parent.parent)).resolve()
 SECRET_FILE = ROOT / "panel" / ".secret"
+USER_FILE = ROOT / "panel" / ".user"
 ENV_FILE = ROOT / ".env"
 PAGE_FILE = ROOT / "panel" / "index.html"
 HOST = os.environ.get("PANEL_HOST", "0.0.0.0")
@@ -44,6 +46,22 @@ ENV_KEYS = [
 ]
 
 
+def _chmod_private(path: Path) -> None:
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def same_text(left: str, right: str) -> bool:
+    a = (left or "").encode("utf-8")
+    b = (right or "").encode("utf-8")
+    if len(a) != len(b):
+        hmac.compare_digest(a, a)
+        return False
+    return hmac.compare_digest(a, b)
+
+
 def ensure_secret() -> str:
     SECRET_FILE.parent.mkdir(parents=True, exist_ok=True)
     if SECRET_FILE.exists():
@@ -52,14 +70,44 @@ def ensure_secret() -> str:
             return token
     token = secrets.token_urlsafe(18)
     SECRET_FILE.write_text(token + "\n", encoding="utf-8")
-    try:
-        os.chmod(SECRET_FILE, 0o600)
-    except OSError:
-        pass
+    _chmod_private(SECRET_FILE)
     return token
 
 
-TOKEN = ensure_secret()
+def load_password() -> str:
+    return ensure_secret()
+
+
+def load_username() -> str:
+    USER_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if USER_FILE.exists():
+        name = USER_FILE.read_text(encoding="utf-8").strip()
+        if name:
+            return name
+    USER_FILE.write_text("admin\n", encoding="utf-8")
+    _chmod_private(USER_FILE)
+    return "admin"
+
+
+def write_account(username: str, password: str) -> None:
+    username = (username or "").strip()
+    password = (password or "").strip()
+    if not username or not password:
+        raise ValueError("账号和密码都不能为空")
+    if any(ch.isspace() for ch in username):
+        raise ValueError("账号不能包含空格")
+    if len(username) > 64:
+        raise ValueError("账号太长")
+    if len(password) < 6:
+        raise ValueError("密码至少 6 位")
+    USER_FILE.write_text(username + "\n", encoding="utf-8")
+    SECRET_FILE.write_text(password + "\n", encoding="utf-8")
+    _chmod_private(USER_FILE)
+    _chmod_private(SECRET_FILE)
+
+
+load_username()
+ensure_secret()
 
 
 def load_env() -> dict:
@@ -156,6 +204,7 @@ def public_config() -> dict:
     data["DOCKERHUB_PASSWORD"] = "********" if pwd else ""
     data["panel_port"] = PORT
     data["EDGE_PREFERENCE"] = data.get("EDGE_PREFERENCE") or "auto"
+    data["PANEL_USERNAME"] = load_username()
     return data
 
 
@@ -303,10 +352,7 @@ class Handler(BaseHTTPRequestHandler):
                     token = jar["token"].value
         if not token:
             return False
-        try:
-            return secrets.compare_digest(token, TOKEN)
-        except Exception:
-            return False
+        return same_text(token, load_password())
 
     def _json(self, code: int, payload: dict) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -370,12 +416,38 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
+        if path == "/api/login":
+            body = self._read_json()
+            user = str(body.get("username") or "").strip()
+            password = str(body.get("password") or "").strip()
+            if same_text(user, load_username()) and same_text(password, load_password()):
+                self._json(200, {"ok": True, "token": password, "username": user})
+            else:
+                self._json(401, {"error": "账号或密码错误"})
+            return
         if not self._authed():
             self._json(401, {"error": "未登录"})
             return
         if path == "/api/config":
             write_env(self._read_json())
             self._json(200, {"ok": True})
+        elif path == "/api/account":
+            body = self._read_json()
+            current = str(body.get("current_password") or "").strip()
+            if not same_text(current, load_password()):
+                self._json(400, {"error": "当前密码不对"})
+                return
+            username = str(body.get("username") or load_username()).strip()
+            password = str(body.get("password") or "").strip()
+            if not password:
+                self._json(400, {"error": "新密码不能为空"})
+                return
+            try:
+                write_account(username, password)
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+                return
+            self._json(200, {"ok": True, "username": username, "token": password})
         elif path == "/api/deploy":
             if not start_job(self._read_json()):
                 self._json(409, {"error": "已有部署任务在跑，请稍候"})
@@ -394,7 +466,8 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> None:
     print(f"面板目录: {ROOT}")
     print(f"打开: http://<美国服务器IP>:{PORT}/")
-    print(f"面板密码: {TOKEN}")
+    print(f"面板账号: {load_username()}")
+    print(f"面板密码: {load_password()}")
     print("建议安全组只对自己 IP 放行该端口。")
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     try:

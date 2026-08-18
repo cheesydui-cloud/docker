@@ -26,6 +26,7 @@ for f in \
   scripts/start-panel.sh \
   scripts/adapt-host.sh \
   scripts/upgrade.sh \
+  scripts/uninstall.sh \
   scripts/render-edge.sh \
   scripts/nginx-disarm-servername.py \
   scripts/cert-status.sh \
@@ -97,7 +98,11 @@ if awk '
 else
   fail "默认路径还在当网站"
 fi
-if grep -q 'docker registry cache' caddy/Caddyfile; then ok "加速站根路径无前端"; else fail "加速站根路径仍像网站"; fi
+if grep -q 'respond 204' caddy/Caddyfile && ! grep -q 'docker registry cache' caddy/Caddyfile; then
+  ok "加速站根路径空白"
+else
+  fail "加速站根路径仍有文字"
+fi
 if grep -q 'handle /install.sh' caddy/Caddyfile; then ok "仍提供 /install.sh"; else fail "缺少 /install.sh"; fi
 if grep -q '/api/cert' panel/index.html && grep -q '操作结果' panel/index.html; then
   ok "控制台含证书卡片和结果区"
@@ -123,6 +128,16 @@ if grep -q 'EDGE_PREFERENCE' panel/app.py && grep -q 'EDGE_PREFERENCE' scripts/a
   ok "面板选择会写入 EDGE_PREFERENCE"
 else
   fail "EDGE_PREFERENCE 未贯通"
+fi
+if grep -q '3x-ui' panel/index.html || grep -q '宿主机' panel/index.html; then
+  fail "下拉文案仍有多余字"
+else
+  ok "下拉文案已去掉多余说明"
+fi
+if grep -q '/api/account' panel/app.py && grep -q '/api/account' panel/index.html && grep -q 'id="new-username"' panel/index.html; then
+  ok "面板可改账号密码"
+else
+  fail "缺少改账号密码"
 fi
 if grep -R -n 'nodelink.uk' --include='*.sh' --include='*.py' --include='*.yml' --include='*.html' --include='*.md' --include='*.example' --include='*.conf' --include='*.caddyfile' . | grep -v './.git/' | grep -v './scripts/verify-local.sh'; then
   fail "代码里仍有写死的 nodelink.uk"
@@ -311,6 +326,16 @@ if [ -x scripts/upgrade.sh ]; then
   ok "upgrade.sh 可执行"
 else
   fail "upgrade.sh 不可执行"
+fi
+if [ -x scripts/uninstall.sh ] && grep -q 'KEEP_DATA' scripts/uninstall.sh && grep -q 'docker-mirror-panel' scripts/uninstall.sh; then
+  ok "uninstall.sh 可执行且不卸 Docker"
+else
+  fail "uninstall.sh 不完整"
+fi
+if grep -q '卸载' README.md && grep -q 'scripts/uninstall.sh' README.md && grep -q 'scripts/upgrade.sh' README.md; then
+  ok "README 含升级和卸载命令"
+else
+  fail "README 缺少升级或卸载命令"
 fi
 
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then

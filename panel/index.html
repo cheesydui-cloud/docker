@@ -8,26 +8,27 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: #f4f4f5;
+      background: #f5f5f5;
       color: #111;
       font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
     }
-    main { max-width: 920px; margin: 0 auto; padding: 24px 16px 64px; }
-    h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; }
-    h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
-    .sub { margin: 0 0 16px; color: #555; }
+    main { max-width: 880px; margin: 0 auto; padding: 28px 16px 72px; }
+    h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; }
+    h2 { margin: 0 0 14px; font-size: 14px; font-weight: 600; }
+    .sub { margin: 0 0 16px; color: #666; }
     .card {
       background: #fff;
-      border: 1px solid #ddd;
-      padding: 16px 18px;
+      border: 1px solid #e3e3e3;
+      padding: 18px 18px 16px;
       margin-bottom: 12px;
     }
-    .top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
-    label { display: block; margin: 10px 0 4px; color: #333; }
+    .top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+    label { display: block; margin: 0 0 6px; color: #333; }
+    .field { margin-bottom: 12px; }
     input, select {
       width: 100%;
       height: 36px;
-      padding: 0 8px;
+      padding: 0 10px;
       border: 1px solid #ccc;
       background: #fff;
       color: #111;
@@ -36,10 +37,10 @@
     input:focus, select:focus { outline: 1px solid #111; border-color: #111; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-    .metric { border: 1px solid #ddd; background: #fafafa; padding: 10px; }
+    .metric { border: 1px solid #e5e5e5; background: #fafafa; padding: 10px 12px; }
     .metric b { display: block; color: #666; font-weight: 500; margin-bottom: 4px; }
     .metric span { word-break: break-all; }
-    .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
     button {
       height: 34px;
       padding: 0 12px;
@@ -49,16 +50,16 @@
       font: inherit;
       cursor: pointer;
     }
-    button:hover { background: #f0f0f0; }
+    button:hover { background: #f2f2f2; }
     button:disabled { opacity: .55; cursor: not-allowed; }
     .primary { background: #111; color: #fff; border-color: #111; }
     .primary:hover { background: #333; }
-    .danger { color: #a40000; border-color: #c9a0a0; }
+    .danger { color: #a40000; border-color: #d0b0b0; }
     pre {
       margin: 0;
-      background: #f7f7f7;
-      border: 1px solid #ddd;
-      padding: 10px;
+      background: #fafafa;
+      border: 1px solid #e5e5e5;
+      padding: 10px 12px;
       overflow: auto;
       min-height: 120px;
       white-space: pre-wrap;
@@ -67,9 +68,13 @@
     .ok { color: #0a7a2f; }
     .bad { color: #b42318; }
     .warn { color: #8a5a00; }
-    .check { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: #444; }
+    .check { display: flex; align-items: center; gap: 8px; margin: 4px 0 12px; color: #444; }
     .check input { width: auto; height: auto; }
-    @media (max-width: 800px) { .row, .metrics { grid-template-columns: 1fr; } }
+    .who { color: #666; font-size: 13px; margin-right: 8px; }
+    @media (max-width: 800px) {
+      .row, .metrics { grid-template-columns: 1fr; }
+      .top { flex-direction: column; }
+    }
   </style>
 </head>
 <body>
@@ -77,16 +82,27 @@
   <div class="top">
     <div>
       <h1>镜像加速站控制台</h1>
-      <p class="sub">域名、证书邮箱、接入方式都在这里填。群晖填加速站主机名，不要填这个控制台地址。</p>
+      <p class="sub">域名和接入方式在这里填。群晖只填加速站主机名。</p>
     </div>
-    <button type="button" id="btn-logout" onclick="logout()" style="display:none">退出</button>
+    <div id="who-box" style="display:none">
+      <span class="who" id="who"></span>
+      <button type="button" onclick="logout()">退出</button>
+    </div>
   </div>
 
   <section class="card" id="login-card">
     <h2>登录</h2>
-    <p class="sub">密码在安装结束时打印，文件在安装目录 <code>panel/.secret</code></p>
-    <label for="token">面板密码</label>
-    <input id="token" type="password" autocomplete="current-password">
+    <p class="sub">默认账号 admin，密码在安装结束时打印，也在安装目录 <code>panel/.secret</code></p>
+    <div class="row">
+      <div class="field">
+        <label for="login-user">账号</label>
+        <input id="login-user" value="admin" autocomplete="username">
+      </div>
+      <div class="field">
+        <label for="token">密码</label>
+        <input id="token" type="password" autocomplete="current-password">
+      </div>
+    </div>
     <div class="btns"><button class="primary" type="button" onclick="login()">登录</button></div>
     <p id="login-msg" class="bad"></p>
   </section>
@@ -100,7 +116,7 @@
         <div class="metric"><b>证书</b><span id="m-cert">—</span></div>
         <div class="metric"><b>控制台</b><span id="m-panel">—</span></div>
       </div>
-      <p class="sub" id="edge-hint" style="margin:10px 0 0"></p>
+      <p class="sub" id="edge-hint" style="margin:10px 0 12px"></p>
       <div class="btns">
         <button type="button" onclick="refreshOverview()">刷新状态</button>
         <button type="button" id="btn-open-site">打开加速站</button>
@@ -111,46 +127,46 @@
     <section class="card">
       <h2>部署参数</h2>
       <div class="row">
-        <div>
+        <div class="field">
           <label for="DOMAIN">主域名</label>
           <input id="DOMAIN" placeholder="example.com" autocomplete="off">
         </div>
-        <div>
+        <div class="field">
           <label for="SITE_ADDRESS">加速站主机名</label>
           <input id="SITE_ADDRESS" placeholder="docker.example.com" autocomplete="off">
         </div>
       </div>
       <div class="row">
-        <div>
+        <div class="field">
           <label for="PANEL_ADDRESS">控制台域名（可选）</label>
           <input id="PANEL_ADDRESS" placeholder="panel.example.com" autocomplete="off">
         </div>
-        <div>
+        <div class="field">
           <label for="ACME_EMAIL">证书邮箱</label>
           <input id="ACME_EMAIL" placeholder="admin@example.com" autocomplete="off">
         </div>
       </div>
       <div class="row">
-        <div>
+        <div class="field">
           <label for="EDGE_PREFERENCE">边缘接入</label>
           <select id="EDGE_PREFERENCE">
-            <option value="auto">自动：按 80/443 占用选择</option>
-            <option value="behind-nginx">Nginx（本机已有 Nginx / 3x-ui）</option>
-            <option value="behind-caddy">Caddy（本机已有宿主机 Caddy）</option>
-            <option value="direct">直连（本机 80/443 空闲，用 edge 签证书）</option>
+            <option value="auto">自动</option>
+            <option value="behind-nginx">Nginx</option>
+            <option value="behind-caddy">Caddy</option>
+            <option value="direct">直连</option>
           </select>
         </div>
-        <div>
+        <div class="field">
           <label for="DOCKERHUB_USERNAME">Docker Hub 用户名</label>
           <input id="DOCKERHUB_USERNAME" autocomplete="off">
         </div>
       </div>
       <div class="row">
-        <div>
+        <div class="field">
           <label for="DOCKERHUB_PASSWORD">Docker Hub Token</label>
           <input id="DOCKERHUB_PASSWORD" type="password" placeholder="已保存则留空不改" autocomplete="off">
         </div>
-        <div>
+        <div class="field">
           <label for="HTTP_PROXY">HTTP 代理（一般不用）</label>
           <input id="HTTP_PROXY" placeholder="留空" autocomplete="off">
         </div>
@@ -169,6 +185,34 @@
       <p id="flash" class="sub" style="margin:12px 0 0">点按钮后，结果出现在下面「操作结果」。</p>
     </section>
 
+    <section class="card">
+      <h2>控制台账号</h2>
+      <p class="sub">改完立刻生效，下次用新账号密码登录。</p>
+      <div class="row">
+        <div class="field">
+          <label for="new-username">账号</label>
+          <input id="new-username" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="current-password">当前密码</label>
+          <input id="current-password" type="password" autocomplete="off">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="new-password">新密码</label>
+          <input id="new-password" type="password" autocomplete="new-password">
+        </div>
+        <div class="field">
+          <label for="new-password2">再输一次新密码</label>
+          <input id="new-password2" type="password" autocomplete="new-password">
+        </div>
+      </div>
+      <div class="btns">
+        <button class="primary" type="button" onclick="changeAccount()">保存账号密码</button>
+      </div>
+    </section>
+
     <section class="card" id="result-card">
       <h2>操作结果</h2>
       <pre id="job">还没有操作。</pre>
@@ -179,7 +223,7 @@
     </section>
     <section class="card">
       <h2>服务日志</h2>
-      <div class="btns">
+      <div class="btns" style="margin-bottom:10px">
         <button type="button" onclick="logs('caddy')">内部路由</button>
         <button type="button" onclick="logs('edge')">边缘证书</button>
         <button type="button" onclick="logs('registry-dockerhub')">dockerhub</button>
@@ -190,6 +234,7 @@
 </main>
 <script>
 let TOKEN = localStorage.getItem("mirror_panel_token") || "";
+let USERNAME = localStorage.getItem("mirror_panel_user") || "admin";
 const $ = (id) => document.getElementById(id);
 
 function showResult(text, kind) {
@@ -210,19 +255,39 @@ async function api(path, opt={}) {
   let res;
   try { res = await fetch(path, Object.assign({}, opt, {headers})); }
   catch (e) { throw new Error("请求没发出去：" + e.message); }
-  if (res.status === 401) throw new Error("密码错误或未登录");
   const text = await res.text();
-  try { return JSON.parse(text); } catch { return {raw: text, status: res.status}; }
+  let data;
+  try { data = JSON.parse(text); } catch { data = {raw: text, status: res.status}; }
+  if (res.status === 401) throw new Error(data.error || "密码错误或未登录");
+  if (!res.ok && data.error) throw new Error(data.error);
+  return data;
 }
 
-function login() {
-  TOKEN = $("token").value.trim();
-  localStorage.setItem("mirror_panel_token", TOKEN);
-  boot();
+async function login() {
+  const username = $("login-user").value.trim() || "admin";
+  const password = $("token").value.trim();
+  $("login-msg").textContent = "";
+  try {
+    const r = await fetch("/api/login", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({username, password})
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || "登录失败");
+    TOKEN = data.token;
+    USERNAME = data.username || username;
+    localStorage.setItem("mirror_panel_token", TOKEN);
+    localStorage.setItem("mirror_panel_user", USERNAME);
+    boot();
+  } catch (e) {
+    $("login-msg").textContent = e.message;
+  }
 }
 function logout() {
   TOKEN = "";
   localStorage.removeItem("mirror_panel_token");
+  localStorage.removeItem("mirror_panel_user");
   location.reload();
 }
 
@@ -231,7 +296,11 @@ async function boot() {
     const cfg = await api("/api/config");
     $("login-card").style.display = "none";
     $("app").style.display = "block";
-    $("btn-logout").style.display = "inline-block";
+    $("who-box").style.display = "block";
+    USERNAME = cfg.PANEL_USERNAME || USERNAME;
+    $("who").textContent = USERNAME;
+    $("new-username").value = USERNAME;
+    $("login-user").value = USERNAME;
     for (const k of ["DOMAIN","SITE_ADDRESS","PANEL_ADDRESS","ACME_EMAIL","DOCKERHUB_USERNAME","HTTP_PROXY","EDGE_PREFERENCE"]) {
       if (cfg[k] !== undefined && $(k)) $(k).value = cfg[k];
     }
@@ -242,6 +311,7 @@ async function boot() {
     $("login-msg").textContent = e.message;
     $("login-card").style.display = "block";
     $("app").style.display = "none";
+    $("who-box").style.display = "none";
   }
 }
 
@@ -288,7 +358,7 @@ async function refreshOverview() {
     const edgeText = ({
       "behind-nginx": "Nginx",
       "behind-caddy": "Caddy",
-      "direct": "直连 edge",
+      "direct": "直连",
       "behind-unknown": "80 被其它进程占用"
     })[edge] || edge;
     if ($("edge-hint")) $("edge-hint").textContent = "当前接入：" + edgeText + "（面板选择：" + pref + "）";
@@ -305,11 +375,11 @@ async function refreshOverview() {
     let hint = "";
     if (kv.cert_ok === "yes") {
       certText = "Let's Encrypt 已生效";
-      hint = "加速站 https://" + (kv.site || "") + " 证书正常。控制台如果走 IP:端口，浏览器写不安全是正常的。";
+      hint = "加速站 https://" + (kv.site || "") + " 证书正常。浏览器打开加速站应是空白页。";
       $("m-cert").className = "ok";
     } else if (kv.public_https === "ok") {
       certText = kv.cert_issuer || "已能打开 HTTPS";
-      hint = "站点能打开。颁发者：" + (kv.cert_issuer || "未知");
+      hint = "站点能打开。颁发者：" + (kv.cert_issuer || "不明");
       $("m-cert").className = "ok";
     } else if (kv.public_https === "redirect") {
       certText = "还在跳转";
@@ -345,6 +415,35 @@ async function saveOnly() {
     const r = await api("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(formPayload())});
     showResult(r.ok ? "已保存，还没有部署。" : (r.error || "保存失败"), r.ok ? "ok" : "bad");
   } catch (e) { showResult("保存失败：" + e.message, "bad"); }
+}
+
+async function changeAccount() {
+  const username = $("new-username").value.trim();
+  const current = $("current-password").value;
+  const password = $("new-password").value;
+  const again = $("new-password2").value;
+  if (!username) { showResult("账号不能为空", "bad"); return; }
+  if (!current) { showResult("请先填当前密码", "bad"); return; }
+  if (!password) { showResult("新密码不能为空", "bad"); return; }
+  if (password !== again) { showResult("两次新密码不一致", "bad"); return; }
+  try {
+    const r = await api("/api/account", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({username, current_password: current, password})
+    });
+    TOKEN = r.token;
+    USERNAME = r.username || username;
+    localStorage.setItem("mirror_panel_token", TOKEN);
+    localStorage.setItem("mirror_panel_user", USERNAME);
+    $("who").textContent = USERNAME;
+    $("current-password").value = "";
+    $("new-password").value = "";
+    $("new-password2").value = "";
+    showResult("账号密码已更新，当前会话继续有效。", "ok");
+  } catch (e) {
+    showResult("改账号失败：" + e.message, "bad");
+  }
 }
 
 async function deploy() {
@@ -406,6 +505,7 @@ async function restart() {
   } catch (e) { showResult("重启失败：" + e.message, "bad"); }
 }
 
+if (USERNAME) $("login-user").value = USERNAME;
 if (TOKEN) boot();
 </script>
 </body>

@@ -115,7 +115,7 @@ curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install
 6. 做健康检查并打印国内客户端配置
 
 装好后群晖 / 国内机器填：`https://mirror.你的域名`  
-浏览器打开这个地址**没有网站**，只会看到一行 `docker registry cache` 或 Registry 的 401，这是正常的。说明和配置在 `https://panel.你的域名`。
+浏览器打开加速站应是**空白页**（没有网站、没有登录）。说明和配置在控制台。
 
 ---
 
@@ -165,10 +165,27 @@ docker compose ps
 docker compose logs -f caddy
 ./scripts/healthcheck.sh
 ./scripts/print-client-config.sh
+```
+
+升级（保留缓存、域名配置、面板账号）：
+
+```bash
 curl -fsSL "https://raw.githubusercontent.com/cheesydui-cloud/docker/main/scripts/upgrade.sh?$(date +%s)" | sudo bash
 ```
 
-缓存目录：`/opt/docker-mirror/data/`（会变大，磁盘请预留）。
+卸载（不卸 Docker，不碰其它站点）：
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/cheesydui-cloud/docker/main/scripts/uninstall.sh?$(date +%s)" | sudo bash
+```
+
+只停服务、留数据：
+
+```bash
+KEEP_DATA=1 curl -fsSL "https://raw.githubusercontent.com/cheesydui-cloud/docker/main/scripts/uninstall.sh?$(date +%s)" | sudo bash
+```
+
+缓存目录：`/opt/docker-mirror/data/`（会变大，磁盘请预留）。控制台账号密码可在面板「控制台账号」里改。
 
 ---
 

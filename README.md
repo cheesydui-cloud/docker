@@ -85,7 +85,7 @@ curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install
 curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/scripts/upgrade.sh | sudo bash
 ```
 
-这条永远拉最新 release：修 Nginx 证书、重新挂 `docker.你的域名`，不丢 `/opt/docker-mirror/data`。
+这条永远拉最新 release：缺 git 会自动装，然后修 Nginx 证书、重新挂加速站主机名，不丢 `/opt/docker-mirror/data`。
 
 ### 方式 B：命令行一次填完
 

@@ -11,12 +11,37 @@ INSTALL_DIR="${INSTALL_DIR:-/opt/docker-mirror}"
 log() { printf '\n==> %s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
+export DEBIAN_FRONTEND=noninteractive
+
+install_pkg() {
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update -y
+    apt-get install -y "$@"
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y "$@"
+  elif command -v yum >/dev/null 2>&1; then
+    yum install -y "$@"
+  elif command -v apk >/dev/null 2>&1; then
+    apk add --no-cache "$@"
+  else
+    die "没有包管理器，请先手动安装：$*"
+  fi
+}
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1 && return 0
+  log "安装 $1"
+  install_pkg "$1"
+  command -v "$1" >/dev/null 2>&1 || die "安装 $1 失败，请先执行：apt-get update && apt-get install -y $1"
+}
+
 if [ "$(id -u)" -ne 0 ]; then
   die "请用 root 执行： curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/scripts/upgrade.sh | sudo bash"
 fi
 
-command -v git >/dev/null 2>&1 || die "需要 git"
-command -v docker >/dev/null 2>&1 || die "需要 docker"
+need_cmd git
+need_cmd curl
+command -v docker >/dev/null 2>&1 || die "需要 docker。先装 Docker 再升级：curl -fsSL https://get.docker.com | sh"
 
 if [ ! -d "$INSTALL_DIR/.git" ]; then
   die "找不到 $INSTALL_DIR/.git ，请先按 README 一键安装"

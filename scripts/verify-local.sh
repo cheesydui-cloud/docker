@@ -184,6 +184,11 @@ if grep -q 'behind-nginx' scripts/adapt-host.sh && grep -q 'behind-caddy' script
 else
   fail "adapt-host 分支不完整"
 fi
+if grep -q 'need_cmd git' scripts/upgrade.sh && grep -q 'install_pkg' scripts/upgrade.sh && ! grep -q '需要 git' scripts/upgrade.sh; then
+  ok "upgrade.sh 缺 git 会自动安装"
+else
+  fail "upgrade.sh 仍会因缺 git 直接退出"
+fi
 DET_PREF="$(mktemp)"
 if EDGE_PREFERENCE=nginx sh scripts/adapt-host.sh detect >"$DET_PREF" && grep -q "MODE='behind-nginx'" "$DET_PREF"; then
   ok "EDGE_PREFERENCE=nginx 强制 behind-nginx"

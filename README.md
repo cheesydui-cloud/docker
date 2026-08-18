@@ -82,10 +82,10 @@ curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install
 ### 已安装机器升级（保留缓存和面板密码）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/scripts/upgrade.sh | sudo bash
+curl -fsSL "https://raw.githubusercontent.com/cheesydui-cloud/docker/main/scripts/upgrade.sh?$(date +%s)" | sudo bash
 ```
 
-这条永远拉最新 release：缺 git 会自动装，然后修 Nginx 证书、重新挂加速站主机名，不丢 `/opt/docker-mirror/data`。
+这条永远拉最新 release：缺 git / Docker 会自动装；本机还没装过会先起控制台。已安装机器会修 Nginx 证书、重新挂加速站主机名，不丢 `/opt/docker-mirror/data`。后面的 `?数字` 用来避开 GitHub raw 缓存，必须带着。
 
 ### 方式 B：命令行一次填完
 
@@ -165,7 +165,7 @@ docker compose ps
 docker compose logs -f caddy
 ./scripts/healthcheck.sh
 ./scripts/print-client-config.sh
-curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/scripts/upgrade.sh | sudo bash
+curl -fsSL "https://raw.githubusercontent.com/cheesydui-cloud/docker/main/scripts/upgrade.sh?$(date +%s)" | sudo bash
 ```
 
 缓存目录：`/opt/docker-mirror/data/`（会变大，磁盘请预留）。

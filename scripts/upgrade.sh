@@ -1,12 +1,14 @@
 #!/usr/bin/env sh
 # 美国服务器一键升级到仓库最新 release，并重新挂 Nginx / 证书。
-# 保留 .env、data/、panel/.secret。
+# 没装过也能跑：会装 git / Docker，拉代码，只起控制台。
+# 保留已有 .env、data/、panel/.secret。
 #
-#   curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/scripts/upgrade.sh | sudo bash
+#   curl -fsSL "https://raw.githubusercontent.com/cheesydui-cloud/docker/main/scripts/upgrade.sh?$(date +%s)" | sudo bash
 set -eu
 
 REPO_URL="${REPO_URL:-https://github.com/cheesydui-cloud/docker.git}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/docker-mirror}"
+PANEL_PORT="${PANEL_PORT:-8088}"
 
 log() { printf '\n==> %s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -41,10 +43,42 @@ fi
 
 need_cmd git
 need_cmd curl
-command -v docker >/dev/null 2>&1 || die "需要 docker。先装 Docker 再升级：curl -fsSL https://get.docker.com | sh"
+if command -v apt-get >/dev/null 2>&1; then
+  apt-get install -y ca-certificates >/dev/null 2>&1 || true
+fi
 
+if ! command -v docker >/dev/null 2>&1; then
+  log "安装 Docker"
+  curl -fsSL https://get.docker.com | sh
+fi
+command -v docker >/dev/null 2>&1 || die "Docker 安装失败"
+if ! docker compose version >/dev/null 2>&1; then
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get install -y docker-compose-plugin || true
+  fi
+fi
+docker compose version >/dev/null 2>&1 || die "未找到 docker compose 插件"
+systemctl enable docker >/dev/null 2>&1 || true
+systemctl start docker >/dev/null 2>&1 || true
+
+mkdir -p "$(dirname "$INSTALL_DIR")"
 if [ ! -d "$INSTALL_DIR/.git" ]; then
-  die "找不到 $INSTALL_DIR/.git ，请先按 README 一键安装"
+  if [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
+    die "$INSTALL_DIR 已有文件但不是 git 仓库，请先备份后删掉再跑，或改 INSTALL_DIR"
+  fi
+  log "本机还没装过，克隆仓库到 $INSTALL_DIR"
+  git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
+  cd "$INSTALL_DIR"
+  chmod +x install.sh scripts/*.sh www/install.sh 2>/dev/null || true
+  if [ ! -f .env ]; then
+    cp .env.example .env
+  fi
+  if command -v ufw >/dev/null 2>&1; then
+    ufw allow "${PANEL_PORT}/tcp" || true
+  fi
+  log "启动控制台。浏览器打开 http://本机IP:${PANEL_PORT}/ 填域名后再部署"
+  PANEL_PORT="$PANEL_PORT" sh scripts/start-panel.sh
+  exit 0
 fi
 
 cd "$INSTALL_DIR"

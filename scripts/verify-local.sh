@@ -86,9 +86,17 @@ if grep -q 'ghcr.example.test' caddy/Caddyfile.edge && grep -q 'k8s.example.test
 else
   fail "ENABLE_ALL_SUBDOMAINS 未生成子域名"
 fi
-if grep -q 'https://mirror.example.test' www/index.html; then ok "首页加速地址"; else fail "首页未写入加速地址"; fi
-if grep -q 'ghcr.example.test' www/index.html; then ok "首页 ghcr 前缀"; else fail "首页未写入 ghcr 前缀"; fi
-if grep -q 'data-copy' www/index.html; then ok "首页可复制加速地址"; else fail "首页缺少复制按钮"; fi
+if awk '
+  $0 ~ /handle \{/ {in_default=1}
+  in_default && $0 ~ /file_server/ {print "default-file-server"; exit 1}
+  in_default && $0 ~ /^\}/ {in_default=0}
+' caddy/Caddyfile; then
+  ok "默认路径不再 file_server"
+else
+  fail "默认路径还在当网站"
+fi
+if grep -q 'docker registry cache' caddy/Caddyfile; then ok "加速站根路径无前端"; else fail "加速站根路径仍像网站"; fi
+if grep -q 'handle /install.sh' caddy/Caddyfile; then ok "仍提供 /install.sh"; else fail "缺少 /install.sh"; fi
 if grep -q '/api/cert' panel/index.html && grep -q '操作结果' panel/index.html; then
   ok "控制台含证书卡片和结果区"
 else

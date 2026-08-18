@@ -74,7 +74,7 @@ curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install
 
 空闲机器和占用机器用同一套安装命令。换一台机器再跑一遍即可，不用改参数。
 
-群晖 / 国内 Docker 仍填 `https://docker.你的域名`。
+群晖 / 国内 Docker 仍填 `https://docker.你的域名`。浏览器打开这个地址**没有网页**是正常的，它只给 Docker 拉镜像。说明页在 `https://panel.你的域名`。
 
 打开域名如果是 **另一个面板** 或浏览器报 `ERR_TOO_MANY_REDIRECTS`：跑升级命令。新版本 HTTP 不再 301 回自己，也不会让内部 Caddy 再跳 HTTPS。
 
@@ -113,7 +113,8 @@ curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install
 5. 启动 7 个拉取缓存 + HTTPS 反代
 6. 做健康检查并打印国内客户端配置
 
-装好后打开：`https://mirror.你的域名/`
+装好后群晖 / 国内机器填：`https://mirror.你的域名`  
+浏览器打开这个地址**没有网站**，只会看到一行 `docker registry cache` 或 Registry 的 401，这是正常的。说明和配置在 `https://panel.你的域名`。
 
 ---
 

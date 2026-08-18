@@ -18,7 +18,7 @@
 内部路由器  127.0.0.1:5080   （Caddy auto_https off，无站点域名）
     ├─ /healthz  → ok
     ├─ /v2*      → registry-dockerhub
-    └─ /         → 说明页
+    └─ /         → 纯 Registry（无前端页）
     │
     ▼
 7 个官方 registry:2 拉取缓存

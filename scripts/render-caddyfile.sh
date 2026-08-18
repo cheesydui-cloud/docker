@@ -12,84 +12,70 @@ if [ -f "$ROOT/.env" ]; then
   set +a
 fi
 
-proxy_block() {
-  backend="$1"
-  cat <<EOF
-		reverse_proxy ${backend}:5000 {
-			flush_interval -1
-			transport http {
-				read_timeout 1h
-				write_timeout 1h
-				dial_timeout 30s
-			}
-		}
-EOF
-}
-
 mkdir -p "$ROOT/caddy"
 
-cat > "$OUT" <<'EOF'
+proxy_block() {
+  backend="$1"
+  printf '\t\treverse_proxy %s:5000 {\n' "$backend"
+  printf '\t\t\tflush_interval -1\n'
+  printf '\t\t\ttransport http {\n'
+  printf '\t\t\t\tread_timeout 1h\n'
+  printf '\t\t\t\twrite_timeout 1h\n'
+  printf '\t\t\t\tdial_timeout 30s\n'
+  printf '\t\t\t}\n'
+  printf '\t\t}\n'
+}
+
 {
-	auto_https off
-	admin off
-}
+  printf '%s\n' '{'
+  printf '\tauto_https off\n'
+  printf '\tadmin off\n'
+  printf '%s\n' '}'
+  printf '\n'
+  printf '%s\n' ':80 {'
+  printf '\tencode gzip zstd\n'
+  printf '\theader {\n'
+  printf '\t\tX-Content-Type-Options nosniff\n'
+  printf '\t\tReferrer-Policy no-referrer\n'
+  printf '\t}\n'
+  printf '\n'
+  printf '\thandle /healthz {\n'
+  printf '\t\trespond "ok" 200\n'
+  printf '\t}\n'
+  printf '\n'
+  printf '\thandle /v2* {\n'
+  proxy_block registry-dockerhub
+  printf '\t}\n'
+  printf '\n'
+  printf '\thandle /install.sh {\n'
+  printf '\t\troot * /usr/share/caddy\n'
+  printf '\t\trewrite * /install.sh\n'
+  printf '\t\tfile_server\n'
+  printf '\t}\n'
+  printf '\n'
+  printf '\t# 加速站本身没有前端。浏览器打开这一行是正常的。\n'
+  printf '\thandle {\n'
+  printf '\t\theader Content-Type "text/plain; charset=utf-8"\n'
+  printf '\t\trespond "docker registry cache\\n" 200\n'
+  printf '\t}\n'
+  printf '%s\n' '}'
+  printf '\n'
 
-:80 {
-	encode gzip zstd
-	header {
-		X-Content-Type-Options nosniff
-		Referrer-Policy no-referrer
-	}
-
-	handle /healthz {
-		respond "ok" 200
-	}
-
-	handle /v2* {
-EOF
-proxy_block registry-dockerhub >> "$OUT"
-cat >> "$OUT" <<'EOF'
-	}
-
-	handle {
-		root * /usr/share/caddy
-		file_server
-	}
-}
-
-:5001 {
-EOF
-proxy_block registry-ghcr >> "$OUT"
-cat >> "$OUT" <<'EOF'
-}
-
-:5002 {
-EOF
-proxy_block registry-gcr >> "$OUT"
-cat >> "$OUT" <<'EOF'
-}
-
-:5003 {
-EOF
-proxy_block registry-quay >> "$OUT"
-cat >> "$OUT" <<'EOF'
-}
-
-:5004 {
-EOF
-proxy_block registry-k8s >> "$OUT"
-cat >> "$OUT" <<'EOF'
-}
-
-:5005 {
-EOF
-proxy_block registry-nvcr >> "$OUT"
-cat >> "$OUT" <<'EOF'
-}
-
-:5006 {
-EOF
-proxy_block registry-mcr >> "$OUT"
-echo "}" >> "$OUT"
+  for pair in \
+    "5001:registry-ghcr" \
+    "5002:registry-gcr" \
+    "5003:registry-quay" \
+    "5004:registry-k8s" \
+    "5005:registry-nvcr" \
+    "5006:registry-mcr"
+  do
+    port="${pair%%:*}"
+    name="${pair#*:}"
+    printf ':%s {\n' "$port"
+    proxy_block "$name"
+    printf '%s\n' '}'
+    printf '\n'
+  done
+} > "$OUT"
 
 echo "已生成 $OUT （内部 HTTP 路由，auto_https off）"

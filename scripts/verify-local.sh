@@ -187,7 +187,7 @@ if grep -q 'detect_public_ip' panel/app.py && grep -q 'PUBLIC_IP' panel/app.py &
 else
   fail "面板未自动填美国机 IP"
 fi
-if grep -q '3128' docker-compose.yml && ! grep -q 'github-proxy' caddy/Caddyfile; then
+if grep -q '3128' docker-compose.yml && grep -q 'ALLOWED_NETWORKS' docker-compose.yml && ! grep -q 'github-proxy' caddy/Caddyfile; then
   ok "GitHub 代理不走加速站 80/443"
 else
   fail "GitHub 代理不该挂到加速站 Caddy"

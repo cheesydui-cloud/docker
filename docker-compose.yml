@@ -124,8 +124,12 @@ services:
     profiles: ["github-proxy"]
     ports:
       - "0.0.0.0:${GITHUB_PROXY_PORT:-3128}:8888"
-    volumes:
-      - ./proxy/tinyproxy.conf:/etc/tinyproxy/tinyproxy.conf:ro
+    environment:
+      LISTEN_PORT: "8888"
+      ALLOWED_NETWORKS: "${GITHUB_PROXY_ALLOW:-127.0.0.1}"
+      TIMEOUT: "600"
+      MAXCLIENTS: "200"
+      LOG_LEVEL: "Info"
 
 volumes:
   edge_data:

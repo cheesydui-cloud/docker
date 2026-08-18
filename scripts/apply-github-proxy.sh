@@ -38,7 +38,7 @@ esac
 
 compose() {
   # 不要沿用 .env 里的 COMPOSE_PROFILES=direct，否则会把 edge 一起带上。
-  env COMPOSE_PROFILES= docker compose --profile github-proxy "$@"
+  env COMPOSE_PROFILES= GITHUB_PROXY_ALLOW="$ALLOW" docker compose --profile github-proxy "$@"
 }
 
 open_firewall() {
@@ -91,8 +91,9 @@ if [ "$allow_n" -eq 0 ]; then
   fail "已开启代理但没有允许 IP。先填国内机器公网 IP。"
 fi
 
-sh "${ROOT}/scripts/render-github-proxy.sh"
+sh "${ROOT}/scripts/render-github-proxy.sh" || true
 open_firewall
-compose up -d github-proxy
+# 不用自定义 conf：kalaksi/tinyproxy 用 ALLOWED_NETWORKS 生成配置，挂只读文件容易起不来。
+compose up -d --force-recreate github-proxy
 log "GitHub 代理已启动 :${PORT}（tinyproxy Allow=${allow_n} 条）"
 log "国内机器：export https_proxy=http://美国机IP:${PORT}"

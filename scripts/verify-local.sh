@@ -133,6 +133,22 @@ else
   fail "adapt-host 分支不完整"
 fi
 
+# 回归：探测结果里的括号不能把 sh source 弄挂（v1.0.3 线上故障）
+STATE_TMP="$(mktemp)"
+REASON_SAMPLE='80 已被 Nginx(pid=1234) 占用'
+# 复用脚本里的 quote 方式
+printf "MODE='%s'\n" "behind-nginx" > "$STATE_TMP"
+printf "REASON='%s'\n" "$(printf '%s' "$REASON_SAMPLE" | sed "s/'/'\\\\''/g")" >> "$STATE_TMP"
+if ( set -eu; # shellcheck disable=SC1090
+     . "$STATE_TMP"
+     [ "$MODE" = "behind-nginx" ] && [ "$REASON" = "$REASON_SAMPLE" ]
+   ); then
+  ok "state.env 含括号时可以 source"
+else
+  fail "state.env 含括号时 source 失败"
+fi
+rm -f "$STATE_TMP"
+
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   if docker compose -f docker-compose.yml config >/dev/null; then
     ok "docker compose config"

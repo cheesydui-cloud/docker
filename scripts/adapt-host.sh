@@ -44,6 +44,14 @@ is_true() {
   esac
 }
 
+shell_quote() {
+  printf "'%s'" "$(printf '%s' "${1:-}" | sed "s/'/'\\\\''/g")"
+}
+
+emit() {
+  printf '%s=%s\n' "$1" "$(shell_quote "$2")"
+}
+
 write_kv() {
   file="$1"
   key="$2"
@@ -54,7 +62,7 @@ write_kv() {
   else
     : > "$tmp"
   fi
-  printf '%s=%s\n' "$key" "$value" >> "$tmp"
+  emit "$key" "$value" >> "$tmp"
   mv "$tmp" "$file"
 }
 
@@ -225,35 +233,37 @@ detect() {
   DOMAIN="${DOMAIN:-}"
   ACME_EMAIL="${ACME_EMAIL:-admin@example.com}"
 
-  cat <<EOF
-MODE=$mode
-REASON=$reason
-SITE_ADDRESS=$SITE_ADDRESS
-DOMAIN=$DOMAIN
-ACME_EMAIL=$ACME_EMAIL
-HTTP80_PROC=$http_proc
-HTTP80_PID=$http_pid
-HTTP80_DOCKER=$http_docker
-HTTP80_CLASS=$http_class
-HTTP443_PROC=$https_proc
-HTTP443_PID=$https_pid
-HTTP443_DOCKER=$https_docker
-HTTP443_CLASS=$https_class
-NGINX_BIN=$(command -v nginx 2>/dev/null || true)
-CADDY_BIN=$(command -v caddy 2>/dev/null || true)
-NGINX_DIR=$(find_nginx_dir)
-HOST_CADDYFILE=$(find_host_caddyfile)
-BACKEND=127.0.0.1:${BACKEND_PORT}
-EOF
+  emit MODE "$mode"
+  emit REASON "$reason"
+  emit SITE_ADDRESS "$SITE_ADDRESS"
+  emit DOMAIN "$DOMAIN"
+  emit ACME_EMAIL "$ACME_EMAIL"
+  emit HTTP80_PROC "$http_proc"
+  emit HTTP80_PID "$http_pid"
+  emit HTTP80_DOCKER "$http_docker"
+  emit HTTP80_CLASS "$http_class"
+  emit HTTP443_PROC "$https_proc"
+  emit HTTP443_PID "$https_pid"
+  emit HTTP443_DOCKER "$https_docker"
+  emit HTTP443_CLASS "$https_class"
+  emit NGINX_BIN "$(command -v nginx 2>/dev/null || true)"
+  emit CADDY_BIN "$(command -v caddy 2>/dev/null || true)"
+  emit NGINX_DIR "$(find_nginx_dir)"
+  emit HOST_CADDYFILE "$(find_host_caddyfile)"
+  emit BACKEND "127.0.0.1:${BACKEND_PORT}"
 }
 
 save_detect() {
   detect > "$STATE_FILE"
   # shellcheck disable=SC1090
-  . "$STATE_FILE"
+  if ! . "$STATE_FILE"; then
+    log "探测结果无法加载，原文如下："
+    cat "$STATE_FILE" || true
+    fail "探测状态文件语法错误"
+  fi
   log "== 主机探测 =="
-  log "80  : ${HTTP80_PROC:-none} pid=${HTTP80_PID:--} docker=${HTTP80_DOCKER:--} ($HTTP80_CLASS)"
-  log "443 : ${HTTP443_PROC:-none} pid=${HTTP443_PID:--} docker=${HTTP443_DOCKER:--} ($HTTP443_CLASS)"
+  log "80  : ${HTTP80_PROC:-none} pid=${HTTP80_PID:--} docker=${HTTP80_DOCKER:--} class=${HTTP80_CLASS:-}"
+  log "443 : ${HTTP443_PROC:-none} pid=${HTTP443_PID:--} docker=${HTTP443_DOCKER:--} class=${HTTP443_CLASS:-}"
   log "决策: $MODE"
   log "原因: $REASON"
 }

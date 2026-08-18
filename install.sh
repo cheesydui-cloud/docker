@@ -188,8 +188,10 @@ DOCKERHUB_PASSWORD=${HUB_TOKEN}
 HTTP_PROXY=
 HTTPS_PROXY=
 NO_PROXY=localhost,127.0.0.1,caddy,registry-dockerhub,registry-ghcr,registry-gcr,registry-quay,registry-k8s,registry-nvcr,registry-mcr
-HTTP_PORT=80
-HTTPS_PORT=443
+HTTP_BIND=127.0.0.1
+HTTP_PORT=5080
+HTTPS_BIND=127.0.0.1
+HTTPS_PORT=5443
 EOF
 
 if [ "$SKIP_DNS" != "true" ]; then

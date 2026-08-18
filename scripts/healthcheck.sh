@@ -27,13 +27,15 @@ fi
 
 echo
 echo "== 本地 / 站点健康检查 =="
-if curl -fsS http://127.0.0.1/healthz >/dev/null 2>&1; then
-  ok "Caddy /healthz (HTTP)"
+HTTP_PORT="${HTTP_PORT:-5080}"
+LOCAL="http://127.0.0.1:${HTTP_PORT}"
+if curl -fsS "${LOCAL}/healthz" >/dev/null 2>&1; then
+  ok "Caddy /healthz (${LOCAL})"
 else
-  fail "Caddy /healthz (HTTP) 无法访问"
+  fail "Caddy /healthz (${LOCAL}) 无法访问"
 fi
 
-code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 8 http://127.0.0.1/v2/ || true)"
+code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 8 "${LOCAL}/v2/" || true)"
 case "$code" in
   200|401) ok "Docker Hub 缓存 /v2/  HTTP $code" ;;
   *) fail "Docker Hub 缓存 /v2/  HTTP ${code:-timeout}" ;;

@@ -33,6 +33,8 @@ ENV_KEYS = [
     "NO_PROXY",
     "HTTP_PORT",
     "HTTPS_PORT",
+    "HTTP_BIND",
+    "HTTPS_BIND",
 ]
 
 
@@ -65,8 +67,10 @@ def load_env() -> dict:
         "HTTP_PROXY": "",
         "HTTPS_PROXY": "",
         "NO_PROXY": "localhost,127.0.0.1,caddy,registry-dockerhub,registry-ghcr,registry-gcr,registry-quay,registry-k8s,registry-nvcr,registry-mcr",
-        "HTTP_PORT": "80",
-        "HTTPS_PORT": "443",
+        "HTTP_PORT": "5080",
+        "HTTPS_PORT": "5443",
+        "HTTP_BIND": "127.0.0.1",
+        "HTTPS_BIND": "127.0.0.1",
     }
     if not ENV_FILE.exists():
         return data
@@ -108,8 +112,10 @@ def write_env(values: dict) -> None:
         f"HTTP_PROXY={current.get('HTTP_PROXY', '')}",
         f"HTTPS_PROXY={current.get('HTTPS_PROXY', '')}",
         f"NO_PROXY={current.get('NO_PROXY', '')}",
-        f"HTTP_PORT={current.get('HTTP_PORT', '80')}",
-        f"HTTPS_PORT={current.get('HTTPS_PORT', '443')}",
+        f"HTTP_PORT={current.get('HTTP_PORT', '5080')}",
+        f"HTTPS_PORT={current.get('HTTPS_PORT', '5443')}",
+        f"HTTP_BIND={current.get('HTTP_BIND', '127.0.0.1')}",
+        f"HTTPS_BIND={current.get('HTTPS_BIND', '127.0.0.1')}",
         "",
     ]
     ENV_FILE.write_text("\n".join(lines), encoding="utf-8")
@@ -159,6 +165,15 @@ def deploy_job(payload: dict) -> None:
     JOB["finished"] = 0
     try:
         write_env(payload)
+        env = load_env()
+        # 80/443 常被 3x-ui / 其他站点占用，自动改绑本机 5080。
+        if env.get("HTTP_PORT", "80") in {"80", ""}:
+            env["HTTP_PORT"] = "5080"
+            env["HTTPS_PORT"] = env.get("HTTPS_PORT") if env.get("HTTPS_PORT") not in {"443", ""} else "5443"
+            env["HTTP_BIND"] = env.get("HTTP_BIND") or "127.0.0.1"
+            env["HTTPS_BIND"] = env.get("HTTPS_BIND") or "127.0.0.1"
+            write_env(env)
+            append_job("检测到将占用 80/443，已改为 127.0.0.1:5080，避免和现有站点抢端口。")
         append_job("已写入 .env")
         skip_dns = bool(payload.get("skip_dns"))
         if not skip_dns:
@@ -187,8 +202,22 @@ def deploy_job(payload: dict) -> None:
         append_job("== 国内客户端配置 ==")
         _, out = run_cmd(["sh", "scripts/print-client-config.sh"], timeout=20)
         append_job(out)
+        site = load_env().get("SITE_ADDRESS", "docker.example.com")
+        append_job("== 请把这段加到已经占用 80/443 的 Caddy / Nginx ==")
+        append_job(
+            f"{site} {{\n"
+            f"\treverse_proxy 127.0.0.1:5080 {{\n"
+            f"\t\tflush_interval -1\n"
+            f"\t\ttransport http {{\n"
+            f"\t\t\tread_timeout 1h\n"
+            f"\t\t\twrite_timeout 1h\n"
+            f"\t\t}}\n"
+            f"\t}}\n"
+            f"}}\n"
+        )
+        append_job("Nginx 示例见 /opt/docker-mirror/examples/nginx-behind-existing.conf")
         JOB["ok"] = True
-        append_job("部署完成")
+        append_job("部署完成。Caddy 日志为空是正常的：镜像站不再监听 80，请去现有反代加站点。")
     except Exception as exc:  # noqa: BLE001
         JOB["ok"] = False
         append_job(f"失败：{exc}")

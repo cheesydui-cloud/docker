@@ -57,6 +57,20 @@ curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install
 
 安全组额外放行 **TCP 8088**（建议只给你自己的 IP）。域名、证书、重启、日志都在这个页面完成。
 
+### 和 3x-ui / 已有网站同机（80/443 已被占用）
+
+这是常见情况。镜像站 **不要再抢 80/443**，默认只听 `127.0.0.1:5080`。  
+在**已经占用 80/443 的 Caddy / Nginx / 3x-ui** 里加一条反代：
+
+```caddy
+docker.nodelink.uk {
+	reverse_proxy 127.0.0.1:5080
+}
+```
+
+Nginx 示例见 `examples/nginx-behind-existing.conf`。  
+证书继续由原来的面板签发。群晖仍填 `https://docker.你的域名`。
+
 ### 方式 B：命令行一次填完
 
 ```bash

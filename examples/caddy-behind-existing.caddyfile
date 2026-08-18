@@ -1,0 +1,12 @@
+# 贴到「已经占用 80/443 的那套 Caddy」里。
+# 证书仍由现有 Caddy 签，镜像站只听 127.0.0.1:5080。
+
+docker.nodelink.uk {
+	reverse_proxy 127.0.0.1:5080 {
+		flush_interval -1
+		transport http {
+			read_timeout 1h
+			write_timeout 1h
+		}
+	}
+}

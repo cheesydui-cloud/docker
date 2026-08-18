@@ -105,6 +105,8 @@ need = [
 missing = [n for n in need if n not in text]
 if "5001:5001" in text:
     missing.append("HTTPS 模式不应默认暴露 5001-5006")
+if "HTTP_PORT:-5080" not in text:
+    missing.append("Caddy 默认应映射 5080，避免抢 80")
 if missing:
     print("MISSING:" + ",".join(missing))
     sys.exit(1)

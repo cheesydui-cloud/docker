@@ -57,7 +57,7 @@ sh scripts/render-caddyfile.sh
 echo "正在启动镜像加速站..."
 docker compose up -d
 echo "把域名接到现有 Nginx/Caddy（如需要）并处理证书..."
-sh scripts/adapt-host.sh integrate || true
+sh scripts/adapt-host.sh integrate
 
 echo
 echo "服务已启动。"

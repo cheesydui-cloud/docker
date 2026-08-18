@@ -25,6 +25,7 @@ for f in \
   scripts/print-client-config.sh \
   scripts/start-panel.sh \
   scripts/adapt-host.sh \
+  scripts/upgrade.sh \
   panel/app.py \
   panel/docker-mirror-panel.service \
   www/install.sh \
@@ -148,6 +149,63 @@ else
   fail "state.env 含括号时 source 失败"
 fi
 rm -f "$STATE_TMP"
+
+echo
+echo "== Nginx 证书路径 / 日志隔离 =="
+# detect 的 stdout 只能是 KEY='value'，日志必须在 stderr
+DET_OUT="$(mktemp)"
+DET_ERR="$(mktemp)"
+if sh scripts/adapt-host.sh detect >"$DET_OUT" 2>"$DET_ERR"; then
+  if grep -q "^MODE=" "$DET_OUT" && ! grep -qvE '^[A-Z0-9_]+=' "$DET_OUT"; then
+    ok "detect stdout 只有 KEY=value"
+  else
+    fail "detect stdout 混入了非赋值行"
+    sed -n '1,20p' "$DET_OUT" || true
+  fi
+else
+  fail "adapt-host detect 退出非 0"
+fi
+rm -f "$DET_OUT" "$DET_ERR"
+
+SSL_OUT="$(mktemp)"
+if sh scripts/adapt-host.sh gen-nginx-ssl docker.example.test \
+    /etc/letsencrypt/live/docker.example.test/fullchain.pem \
+    /etc/letsencrypt/live/docker.example.test/privkey.pem >"$SSL_OUT"; then
+  if awk '
+    $1=="ssl_certificate" { if (NF!=2 || $2 !~ /^\/etc\/letsencrypt\/live\/docker\.example\.test\/fullchain\.pem;?$/) { print "bad-cert", NF, $0; exit 1 } }
+    $1=="ssl_certificate_key" { if (NF!=2 || $2 !~ /^\/etc\/letsencrypt\/live\/docker\.example\.test\/privkey\.pem;?$/) { print "bad-key", NF, $0; exit 1 } }
+  ' "$SSL_OUT"; then
+    ok "ssl_certificate 恰好一个绝对路径"
+  else
+    fail "生成的 ssl_certificate 参数个数不对"
+    grep ssl_certificate "$SSL_OUT" || true
+  fi
+else
+  fail "gen-nginx-ssl 失败"
+fi
+rm -f "$SSL_OUT"
+
+if sh scripts/adapt-host.sh gen-nginx-ssl docker.example.test \
+    $'已有证书 /etc/letsencrypt/live/x ，复用\n/etc/letsencrypt/live/x/fullchain.pem' \
+    /etc/letsencrypt/live/x/privkey.pem >/dev/null 2>&1; then
+  fail "污染后的证书路径本应被拒绝"
+else
+  ok "污染后的证书路径被拒绝"
+fi
+
+if sh scripts/adapt-host.sh gen-nginx-ssl docker.example.test \
+    "/tmp/has space/fullchain.pem" \
+    /tmp/privkey.pem >/dev/null 2>&1; then
+  fail "含空格的证书路径本应被拒绝"
+else
+  ok "含空格的证书路径被拒绝"
+fi
+
+if [ -x scripts/upgrade.sh ]; then
+  ok "upgrade.sh 可执行"
+else
+  fail "upgrade.sh 不可执行"
+fi
 
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   if docker compose -f docker-compose.yml config >/dev/null; then

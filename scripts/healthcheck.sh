@@ -41,11 +41,13 @@ case "$code" in
   *) fail "Docker Hub 缓存 /v2/  HTTP ${code:-timeout}" ;;
 esac
 
-if [ "$HTTP_ONLY" != "true" ] && [ "$SITE_ADDRESS" != ":80" ]; then
+# 有真实主机名时必须验公网 HTTPS。挂在现有 Nginx 后面时 HTTP_ONLY=true，
+# 但浏览器走的仍是 https://docker.xxx，不能只看 127.0.0.1:5080。
+if [ "$SITE_ADDRESS" != ":80" ] && printf '%s' "$SITE_ADDRESS" | grep -q '\.'; then
   if curl -fsS "https://${SITE_ADDRESS}/healthz" >/dev/null 2>&1; then
     ok "https://${SITE_ADDRESS}/healthz 证书与站点正常"
   else
-    fail "https://${SITE_ADDRESS}/healthz 失败（证书未签下来或 443 未放行）"
+    fail "https://${SITE_ADDRESS}/healthz 失败（现有 Nginx/Caddy 未挂上本站，或证书未签下来）"
   fi
 fi
 

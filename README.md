@@ -70,6 +70,16 @@ curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install
 
 一般不用再手改 Nginx。群晖仍填 `https://docker.你的域名`。
 
+打开 `https://docker.你的域名` 如果看到的是 **另一个面板**（3x-ui / 渡口等），说明 443 还落在默认站点。升级后再点一次「保存并部署」，或直接跑下面的升级命令。
+
+### 已安装机器升级（保留缓存和面板密码）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/scripts/upgrade.sh | sudo bash
+```
+
+这条永远拉最新 release：修 Nginx 证书、重新挂 `docker.你的域名`，不丢 `/opt/docker-mirror/data`。
+
 ### 方式 B：命令行一次填完
 
 ```bash
@@ -147,7 +157,7 @@ docker compose ps
 docker compose logs -f caddy
 ./scripts/healthcheck.sh
 ./scripts/print-client-config.sh
-docker compose pull && docker compose up -d
+curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/scripts/upgrade.sh | sudo bash
 ```
 
 缓存目录：`/opt/docker-mirror/data/`（会变大，磁盘请预留）。
@@ -159,7 +169,7 @@ docker compose pull && docker compose up -d
 | 现象 | 处理 |
 | --- | --- |
 | 一键脚本卡在 DNS | 解析还没指到这台机器，或 TTL 未生效 |
-| 浏览器证书错误 / healthz 失败 | 安全组没放行 80/443，或 Cloudflare 开了代理 |
+| 浏览器打开域名是别的项目 / 登录页 | 443 被原 Nginx 默认站抢走。跑升级脚本，确认 `/etc/nginx/conf.d/docker-mirror.conf` 里 `ssl_certificate` 只有一行路径 |
 | `toomanyrequests` | 加 `--hub-user` / `--hub-token` 后重跑或改 `.env` 再 `docker compose up -d` |
 | 群晖填了还是很慢 / 失败 | 确认填的是 `https://mirror.域名`，并已重启套件 |
 | `ghcr.io` / `k8s` 还是拉不到 | 正常，要改镜像前缀，不是只填加速地址 |

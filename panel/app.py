@@ -38,6 +38,8 @@ ENV_KEYS = [
     "HTTPS_BIND",
     "COMPOSE_PROFILES",
     "EDGE_MODE",
+    "PANEL_ADDRESS",
+    "PANEL_PORT",
 ]
 
 
@@ -76,6 +78,8 @@ def load_env() -> dict:
         "HTTPS_BIND": "127.0.0.1",
         "COMPOSE_PROFILES": "",
         "EDGE_MODE": "",
+        "PANEL_ADDRESS": "",
+        "PANEL_PORT": str(PORT),
     }
     if not ENV_FILE.exists():
         return data
@@ -126,6 +130,8 @@ def write_env(values: dict) -> None:
         f"HTTPS_BIND={current.get('HTTPS_BIND', '127.0.0.1')}",
         f"COMPOSE_PROFILES={current.get('COMPOSE_PROFILES', '')}",
         f"EDGE_MODE={current.get('EDGE_MODE', '')}",
+        f"PANEL_ADDRESS={current.get('PANEL_ADDRESS', '')}",
+        f"PANEL_PORT={current.get('PANEL_PORT', str(PORT))}",
         "",
     ]
     ENV_FILE.write_text("\n".join(lines), encoding="utf-8")
@@ -137,6 +143,10 @@ def public_config() -> dict:
     data["DOCKERHUB_PASSWORD_SET"] = bool(pwd)
     data["DOCKERHUB_PASSWORD"] = "********" if pwd else ""
     data["panel_port"] = PORT
+    if not data.get("PANEL_ADDRESS"):
+        domain = (data.get("DOMAIN") or "").strip()
+        if domain and domain != "example.com":
+            data["PANEL_ADDRESS"] = f"panel.{domain}"
     return data
 
 

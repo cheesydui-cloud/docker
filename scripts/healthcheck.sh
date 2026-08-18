@@ -13,6 +13,8 @@ fi
 
 SITE_ADDRESS="${SITE_ADDRESS:-:80}"
 HTTP_PORT="${HTTP_PORT:-5080}"
+PANEL_ADDRESS="${PANEL_ADDRESS:-}"
+PANEL_PORT="${PANEL_PORT:-8088}"
 
 ok() { printf '  [OK]  %s\n' "$1"; }
 fail() { printf '  [FAIL] %s\n' "$1"; FAILS=$((FAILS + 1)); }
@@ -40,6 +42,20 @@ case "$code" in
   301|302|307|308) fail "内部路由对 /v2/ 做了跳转 HTTP $code（会和边缘 HTTPS 打架）" ;;
   *) fail "Docker Hub 缓存 /v2/  HTTP ${code:-timeout}" ;;
 esac
+
+if curl -fsS --connect-timeout 3 "http://127.0.0.1:${PANEL_PORT}/healthz" >/dev/null 2>&1; then
+  ok "本机面板 /healthz (:${PANEL_PORT})"
+else
+  echo "  [SKIP] 本机面板未启动"
+fi
+if [ -n "$PANEL_ADDRESS" ]; then
+  pcode="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 10 --max-time 15 --max-redirs 0 "https://${PANEL_ADDRESS}/healthz" || true)"
+  if [ "$pcode" = "200" ]; then
+    ok "https://${PANEL_ADDRESS}/healthz"
+  else
+    echo "  [SKIP] https://${PANEL_ADDRESS}/healthz HTTP ${pcode:-timeout}（DNS 未指过来时正常）"
+  fi
+fi
 
 if [ "$SITE_ADDRESS" != ":80" ] && printf '%s' "$SITE_ADDRESS" | grep -q '\.'; then
   pub="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 12 --max-time 20 --max-redirs 0 "https://${SITE_ADDRESS}/healthz" || true)"

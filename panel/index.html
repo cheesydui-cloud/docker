@@ -93,8 +93,9 @@
       <div class="metrics">
         <div class="metric"><b>加速站</b><span id="m-site">—</span></div>
         <div class="metric"><b>证书</b><span id="m-cert">—</span></div>
-        <div class="metric"><b>接入方式</b><span id="m-edge">—</span></div>
+        <div class="metric"><b>控制台</b><span id="m-panel">—</span></div>
       </div>
+      <p class="sub" id="edge-hint" style="margin-top:10px"></p>
       <div class="btns">
         <button class="ghost" type="button" onclick="refreshOverview()">刷新状态</button>
         <button class="ghost" type="button" id="btn-open-site">打开加速站</button>
@@ -116,19 +117,25 @@
       </div>
       <div class="row">
         <div>
-          <label for="ACME_EMAIL">证书邮箱</label>
-          <input id="ACME_EMAIL" placeholder="admin@example.com">
+          <label for="PANEL_ADDRESS">控制台域名</label>
+          <input id="PANEL_ADDRESS" placeholder="panel.example.com">
         </div>
         <div>
-          <label for="DOCKERHUB_USERNAME">Docker Hub 用户名</label>
-          <input id="DOCKERHUB_USERNAME">
+          <label for="ACME_EMAIL">证书邮箱</label>
+          <input id="ACME_EMAIL" placeholder="admin@example.com">
         </div>
       </div>
       <div class="row">
         <div>
+          <label for="DOCKERHUB_USERNAME">Docker Hub 用户名</label>
+          <input id="DOCKERHUB_USERNAME">
+        </div>
+        <div>
           <label for="DOCKERHUB_PASSWORD">Docker Hub Token</label>
           <input id="DOCKERHUB_PASSWORD" type="password" placeholder="已保存则留空不改">
         </div>
+      </div>
+      <div class="row">
         <div>
           <label for="HTTP_PROXY">HTTP 代理（一般不用）</label>
           <input id="HTTP_PROXY" placeholder="留空">
@@ -211,8 +218,8 @@ async function boot() {
     $("login-card").style.display = "none";
     $("app").style.display = "block";
     $("btn-logout").style.display = "inline-flex";
-    for (const k of ["DOMAIN","SITE_ADDRESS","ACME_EMAIL","DOCKERHUB_USERNAME","HTTP_PROXY"]) {
-      if (cfg[k] !== undefined) $(k).value = cfg[k];
+    for (const k of ["DOMAIN","SITE_ADDRESS","PANEL_ADDRESS","ACME_EMAIL","DOCKERHUB_USERNAME","HTTP_PROXY"]) {
+      if (cfg[k] !== undefined && $(k)) $(k).value = cfg[k];
     }
     $("DOCKERHUB_PASSWORD").placeholder = cfg.DOCKERHUB_PASSWORD_SET ? "已保存，留空不改" : "建议填写 Access Token";
     refreshOverview();
@@ -228,6 +235,7 @@ function formPayload() {
   const data = {
     DOMAIN: $("DOMAIN").value.trim(),
     SITE_ADDRESS: $("SITE_ADDRESS").value.trim(),
+    PANEL_ADDRESS: $("PANEL_ADDRESS") ? $("PANEL_ADDRESS").value.trim() : "",
     ACME_EMAIL: $("ACME_EMAIL").value.trim(),
     HTTP_ONLY: "true",
     DOCKERHUB_USERNAME: $("DOCKERHUB_USERNAME").value.trim(),
@@ -262,12 +270,22 @@ async function refreshOverview() {
     const kv = parseKv(r.output || "");
     $("m-site").textContent = kv.site || $("SITE_ADDRESS").value || "未设置";
     const edge = kv.edge_mode || "未探测";
-    $("m-edge").textContent = ({
+    const edgeText = ({
       "behind-nginx":"挂在现有 Nginx 后面",
       "behind-caddy":"挂在现有 Caddy 后面",
       "direct":"本机 80/443 空闲，自己签证书",
       "behind-unknown":"80 被其它进程占用"
     })[edge] || edge;
+    if ($("edge-hint")) $("edge-hint").textContent = "接入方式：" + edgeText;
+    const panelHost = kv.panel || ($("PANEL_ADDRESS") && $("PANEL_ADDRESS").value) || "";
+    if (kv.panel_https === "ok") {
+      $("m-panel").textContent = "https://" + panelHost;
+      $("m-panel").className = "ok";
+    } else if (panelHost) {
+      $("m-panel").textContent = panelHost + "（DNS 指过来后自动签证书）";
+    } else {
+      $("m-panel").textContent = "http://IP:8088";
+    }
     let certText = "还没探测到";
     let hint = "";
     if (kv.cert_ok === "yes") {
@@ -378,6 +396,7 @@ if (domainEl) {
   domainEl.addEventListener("blur", () => {
     const d = $("DOMAIN").value.trim().replace(/^https?:\/\//,"").replace(/\/$/,"");
     if (d && !$("SITE_ADDRESS").value.trim()) $("SITE_ADDRESS").value = "docker." + d.replace(/^mirror\./,"");
+    if (d && $("PANEL_ADDRESS") && !$("PANEL_ADDRESS").value.trim()) $("PANEL_ADDRESS").value = "panel." + d.replace(/^mirror\./,"");
   });
 }
 if (TOKEN) boot();

@@ -50,7 +50,22 @@ while [ "$i" -lt 10 ]; do
 done
 
 ip="$(curl -4 -fsS --connect-timeout 5 --max-time 10 https://ifconfig.me 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')"
+panel_host=""
+if [ -f "$ROOT/.env" ]; then
+  # shellcheck disable=SC1091
+  set -a
+  . "$ROOT/.env"
+  set +a
+  panel_host="${PANEL_ADDRESS:-}"
+fi
+if [ -z "$panel_host" ] && [ -n "${DOMAIN:-}" ] && [ "$DOMAIN" != "example.com" ]; then
+  panel_host="panel.${DOMAIN}"
+fi
+
 echo
 echo "打开控制台： http://${ip:-<服务器IP>}:${PORT}/"
+if [ -n "$panel_host" ]; then
+  echo "域名后台：   https://${panel_host}/   （DNS 指到本机并部署后生效）"
+fi
 echo "面板密码：   ${secret:-（看 $ROOT/panel/.secret）}"
-echo "安全组请放行 TCP ${PORT}，建议只对自己家里的 IP 开放。"
+echo "安全组请放行 TCP ${PORT}，建议只对自己家里的 IP 开放。域名后台走 443，可不再对公网开 8088。"

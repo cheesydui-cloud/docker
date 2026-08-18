@@ -11,6 +11,8 @@
     ├─ 已有 Nginx/3x-ui → /etc/nginx/conf.d/docker-mirror.conf + certbot
     └─ 已有宿主机 Caddy → 写入现有 Caddyfile
     │
+    │  可选：https://panel.域名 → 127.0.0.1:8088
+    │
     │  只转发 HTTP，不再 301
     ▼
 内部路由器  127.0.0.1:5080   （Caddy auto_https off，无站点域名）

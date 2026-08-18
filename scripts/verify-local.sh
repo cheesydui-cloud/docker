@@ -74,6 +74,11 @@ if grep -q 'registry-dockerhub:5000' caddy/Caddyfile; then ok "内部路由反�
 if grep -q ':5001' caddy/Caddyfile; then ok "内部路由含 5001"; else fail "内部路由缺少 5001"; fi
 if grep -q 'mirror.example.test' caddy/Caddyfile.edge; then ok "边缘 Caddy 含主站"; else fail "边缘 Caddy 未含主站"; fi
 if grep -q 'reverse_proxy caddy:80' caddy/Caddyfile.edge; then ok "边缘反代内部 HTTP"; else fail "边缘未反代内部 HTTP"; fi
+if grep -q 'panel.example.test' caddy/Caddyfile.edge && grep -q 'host.docker.internal:8088' caddy/Caddyfile.edge; then
+  ok "边缘含面板域名"
+else
+  fail "边缘未生成面板域名"
+fi
 if grep -q 'ghcr.example.test' caddy/Caddyfile.edge; then fail "默认不应生成未解析的 ghcr 站点"; else ok "默认不生成多余子域名"; fi
 ENABLE_ALL_SUBDOMAINS=true sh scripts/render-edge.sh >/dev/null
 if grep -q 'ghcr.example.test' caddy/Caddyfile.edge && grep -q 'k8s.example.test' caddy/Caddyfile.edge; then
@@ -126,6 +131,8 @@ if "HTTP_PORT:-5080" not in text:
     missing.append("内部 Caddy 默认应映射 5080，避免抢 80")
 if 'profiles: ["direct"]' not in text:
     missing.append("edge 必须挂在 direct profile")
+if "host.docker.internal:host-gateway" not in text:
+    missing.append("edge 需要 host.docker.internal 才能反代面板")
 if missing:
     print("MISSING:" + ",".join(missing))
     sys.exit(1)
@@ -204,10 +211,23 @@ if sh scripts/adapt-host.sh gen-nginx-ssl docker.example.test \
   else
     ok "Nginx 站点不做二次跳转"
   fi
+  if grep -q 'proxy_pass http://127.0.0.1:5080' "$SSL_OUT"; then
+    ok "加速站反代内部 5080"
+  else
+    fail "加速站未反代 5080"
+  fi
 else
   fail "gen-nginx-ssl 失败"
 fi
 rm -f "$SSL_OUT"
+
+# 面板站点：同一个生成器，目标应能改成 8088
+# 通过内部函数间接验证：nginx_http_only_server 第二参数
+if grep -q 'PANEL_BACKEND=' scripts/adapt-host.sh && grep -q 'docker-mirror-panel.conf' scripts/adapt-host.sh; then
+  ok "adapt-host 含面板域名接入"
+else
+  fail "adapt-host 缺少面板域名接入"
+fi
 
 DISARM_IN="$(mktemp)"
 DISARM_NGINX="$(mktemp)"

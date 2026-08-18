@@ -187,13 +187,15 @@ DOCKERHUB_USERNAME=${HUB_USER}
 DOCKERHUB_PASSWORD=${HUB_TOKEN}
 HTTP_PROXY=
 HTTPS_PROXY=
-NO_PROXY=localhost,127.0.0.1,caddy,registry-dockerhub,registry-ghcr,registry-gcr,registry-quay,registry-k8s,registry-nvcr,registry-mcr
+	NO_PROXY=localhost,127.0.0.1,caddy,registry-dockerhub,registry-ghcr,registry-gcr,registry-quay,registry-k8s,registry-nvcr,registry-mcr
 	HTTP_BIND=127.0.0.1
 	HTTP_PORT=5080
 	HTTPS_BIND=127.0.0.1
 	HTTPS_PORT=5443
 	COMPOSE_PROFILES=
 	EDGE_MODE=
+	PANEL_ADDRESS=panel.${DOMAIN}
+	PANEL_PORT=${PANEL_PORT}
 	EOF
 
 if [ "$SKIP_DNS" != "true" ]; then

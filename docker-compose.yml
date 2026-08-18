@@ -43,6 +43,8 @@ services:
       - "0.0.0.0:80:80"
       - "0.0.0.0:443:443"
       - "0.0.0.0:443:443/udp"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
     volumes:

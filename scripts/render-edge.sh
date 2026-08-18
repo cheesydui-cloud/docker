@@ -13,6 +13,11 @@ fi
 
 SITE_ADDRESS="${SITE_ADDRESS:-:80}"
 DOMAIN="${DOMAIN:-}"
+PANEL_ADDRESS="${PANEL_ADDRESS:-}"
+PANEL_PORT="${PANEL_PORT:-8088}"
+if [ -z "$PANEL_ADDRESS" ] && [ -n "$DOMAIN" ] && [ "$DOMAIN" != "example.com" ]; then
+  PANEL_ADDRESS="panel.${DOMAIN}"
+fi
 
 mkdir -p "$ROOT/caddy"
 
@@ -43,19 +48,33 @@ fi
 }
 
 ${SITE_ADDRESS} {
-	encode gzip zstd
-	reverse_proxy caddy:80 {
-		flush_interval -1
-		header_up X-Forwarded-Proto {scheme}
-		header_up X-Forwarded-Host {host}
-		transport http {
-			read_timeout 1h
-			write_timeout 1h
-			dial_timeout 30s
+		encode gzip zstd
+		reverse_proxy caddy:80 {
+			flush_interval -1
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+			transport http {
+				read_timeout 1h
+				write_timeout 1h
+				dial_timeout 30s
+			}
 		}
 	}
-}
 EOF
+
+  if [ -n "$PANEL_ADDRESS" ] && [ "$PANEL_ADDRESS" != "$SITE_ADDRESS" ]; then
+    cat <<EOF
+
+${PANEL_ADDRESS} {
+		encode gzip zstd
+		reverse_proxy host.docker.internal:${PANEL_PORT} {
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+			header_up Host {host}
+		}
+	}
+EOF
+  fi
 
   if [ -n "$DOMAIN" ] && [ "${ENABLE_ALL_SUBDOMAINS:-false}" = "true" ]; then
     for pair in \

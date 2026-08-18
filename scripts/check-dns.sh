@@ -75,7 +75,8 @@ if [ -n "$DOMAIN" ]; then
     "k8s.${DOMAIN}" \
     "nvcr.${DOMAIN}" \
     "mcr.${DOMAIN}" \
-    "mirror.${DOMAIN}"
+    "mirror.${DOMAIN}" \
+    "panel.${DOMAIN}"
   do
     [ "$name" = "$SITE_ADDRESS" ] && continue
     ip="$(lookup "$name")"
@@ -87,6 +88,20 @@ if [ -n "$DOMAIN" ]; then
       printf '  [OK]  %-40s  %s\n' "$name" "$ip"
     fi
   done
+fi
+
+echo
+if [ -n "${PANEL_ADDRESS:-}" ]; then
+  echo
+  echo "控制台域名（没有也不影响加速站）："
+  pip="$(lookup "$PANEL_ADDRESS")"
+  if [ -z "$pip" ]; then
+    printf '  [--]  %-40s  未解析（解析后升级即可 https 打开后台）\n' "$PANEL_ADDRESS"
+  elif [ -n "$public_ip" ] && [ "$pip" != "$public_ip" ]; then
+    printf '  [偏]  %-40s  %s\n' "$PANEL_ADDRESS" "$pip"
+  else
+    printf '  [OK]  %-40s  %s\n' "$PANEL_ADDRESS" "$pip"
+  fi
 fi
 
 echo

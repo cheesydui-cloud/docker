@@ -15,12 +15,19 @@ fi
 SITE_ADDRESS="${SITE_ADDRESS:-}"
 HTTP_PORT="${HTTP_PORT:-5080}"
 EDGE_MODE="${EDGE_MODE:-}"
+PANEL_ADDRESS="${PANEL_ADDRESS:-}"
+PANEL_PORT="${PANEL_PORT:-8088}"
+if [ -z "$PANEL_ADDRESS" ] && [ -n "${DOMAIN:-}" ] && [ "$DOMAIN" != "example.com" ]; then
+  PANEL_ADDRESS="panel.${DOMAIN}"
+fi
 
 kv() { printf '%s=%s\n' "$1" "$2"; }
 
 kv site "$SITE_ADDRESS"
 kv edge_mode "$EDGE_MODE"
 kv backend_port "$HTTP_PORT"
+kv panel "$PANEL_ADDRESS"
+kv panel_port "$PANEL_PORT"
 
 if curl -fsS --connect-timeout 3 --max-time 8 "http://127.0.0.1:${HTTP_PORT}/healthz" >/dev/null 2>&1; then
   kv backend ok
@@ -81,3 +88,17 @@ elif [ "$pub" = "ok" ]; then
 else
   kv cert_ok no
 fi
+
+panel_https="fail"
+if [ -n "$PANEL_ADDRESS" ]; then
+  pcode="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 8 --max-time 15 --max-redirs 0 "https://${PANEL_ADDRESS}/healthz" || true)"
+  kv panel_https_code "${pcode:-000}"
+  if [ "$pcode" = "200" ]; then
+    panel_https="ok"
+  elif [ "$pcode" = "301" ] || [ "$pcode" = "302" ] || [ "$pcode" = "307" ] || [ "$pcode" = "308" ]; then
+    panel_https="redirect"
+  fi
+else
+  kv panel_https_code ""
+fi
+kv panel_https "$panel_https"

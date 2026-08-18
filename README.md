@@ -26,6 +26,7 @@ Cloudflare 必须 **关闭小橙云（仅 DNS）**，否则证书和 Registry �
 | --- | --- | --- |
 | `mirror` | A | 美国服务器 IP |
 | `docker` | A | 同上 |
+| `panel` | A | 同上（管理后台 `https://panel.你的域名`） |
 | `ghcr` | A | 同上 |
 | `gcr` | A | 同上 |
 | `quay` | A | 同上 |
@@ -50,14 +51,14 @@ curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/install
 
 脚本只装 Docker、拉代码、启动控制台。然后：
 
-1. 浏览器打开 `http://美国服务器IP:8088/`
+1. 浏览器打开 `http://美国服务器IP:8088/`（或 DNS 生效后的 `https://panel.你的域名`）
 2. 用终端打印的**面板密码**登录（也在 `/opt/docker-mirror/panel/.secret`）
 3. 填写主域名、证书邮箱、Docker Hub Token
 4. 点 **保存并部署**
 
-安全组额外放行 **TCP 8088**（建议只给你自己的 IP）。域名、证书、重启、日志都在这个页面完成。
+安全组额外放行 **TCP 8088**（建议只给你自己的 IP）。`panel` 解析指到本机后，部署会自动给后台签证书。域名、证书、重启、日志都在这个页面完成。
 
-`http://IP:8088` 本身没有 HTTPS，Chrome 写「不安全」是正常的。真正给群晖填的是 `https://docker.你的域名`，证书是 Let's Encrypt。
+`http://IP:8088` 本身没有 HTTPS，Chrome 写「不安全」是正常的。后台域名是 `https://panel.你的域名`。群晖填 `https://docker.你的域名`，不要填面板地址。
 
 ### 任意机器怎么选边缘（不用你判断）
 
@@ -179,7 +180,7 @@ curl -fsSL https://raw.githubusercontent.com/cheesydui-cloud/docker/main/scripts
 | `toomanyrequests` | 加 `--hub-user` / `--hub-token` 后重跑或改 `.env` 再 `docker compose up -d` |
 | 群晖填了还是很慢 / 失败 | 确认填的是 `https://mirror.域名`，并已重启套件 |
 | `ghcr.io` / `k8s` 还是拉不到 | 正常，要改镜像前缀，不是只填加速地址 |
-| 面板 `:8088` 显示「不安全」 | 正常。面板是 HTTP。Let's Encrypt 挂在 `https://加速站主机名` |
+| 面板 `:8088` 显示「不安全」 | 正常。把 `panel` A 记录指到服务器后再升级，走 `https://panel.域名` |
 | 面板按钮没反应 | 强制刷新控制台（Ctrl/Cmd+Shift+R）。结果在页面下方「操作结果」 |
 
 这是**拉取缓存**，不是推送仓库，也不要裸奔成对全世界开放的公共镜像站（建议安全组只给自己用，或前面加防火墙）。

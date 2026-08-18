@@ -25,6 +25,8 @@ MARKER_END="# END docker-mirror"
 ACME_WEBROOT="${ACME_WEBROOT:-/var/www/docker-mirror-acme}"
 BACKEND_PORT="${BACKEND_PORT:-5080}"
 BACKEND="127.0.0.1:${BACKEND_PORT}"
+PANEL_PORT="${PANEL_PORT:-8088}"
+PANEL_BACKEND="127.0.0.1:${PANEL_PORT}"
 
 mkdir -p "$STATE_DIR"
 
@@ -269,12 +271,15 @@ detect() {
   SITE_ADDRESS="${SITE_ADDRESS:-docker.nodelink.uk}"
   DOMAIN="${DOMAIN:-}"
   ACME_EMAIL="${ACME_EMAIL:-admin@example.com}"
+  PANEL_ADDRESS="$(panel_address)"
 
   emit MODE "$mode"
   emit REASON "$reason"
   emit SITE_ADDRESS "$SITE_ADDRESS"
   emit DOMAIN "$DOMAIN"
   emit ACME_EMAIL "$ACME_EMAIL"
+  emit PANEL_ADDRESS "$PANEL_ADDRESS"
+  emit PANEL_BACKEND "$PANEL_BACKEND"
   emit HTTP80_PROC "$http_proc"
   emit HTTP80_PID "$http_pid"
   emit HTTP80_DOCKER "$http_docker"
@@ -325,6 +330,13 @@ configure() {
   set_env HTTPS_BIND 127.0.0.1
   set_env HTTPS_PORT 5443
   set_env EDGE_MODE "$MODE"
+  if [ -z "${PANEL_ADDRESS:-}" ]; then
+    PANEL_ADDRESS="$(panel_address)"
+  fi
+  if [ -n "${PANEL_ADDRESS:-}" ]; then
+    set_env PANEL_ADDRESS "$PANEL_ADDRESS"
+  fi
+  set_env PANEL_PORT "$PANEL_PORT"
 
   case "$MODE" in
     direct)
@@ -363,6 +375,7 @@ upsert_marked_file() {
 }
 
 proxy_location() {
+  target="${1:-$BACKEND}"
   cat <<EOF
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
@@ -375,12 +388,13 @@ proxy_location() {
         proxy_read_timeout 3600;
         proxy_send_timeout 3600;
         client_max_body_size 0;
-        proxy_pass http://${BACKEND};
+        proxy_pass http://${target};
 EOF
 }
 
 nginx_http_only_server() {
   site="$1"
+  target="${2:-$BACKEND}"
   cat <<EOF
 $MARKER_BEGIN
 # docker-mirror HTTP：ACME + 反代。这里绝不 301 到 HTTPS，避免橙云/面板重定向环。
@@ -394,7 +408,7 @@ server {
     }
 
     location / {
-$(proxy_location)
+$(proxy_location "$target")
     }
 }
 $MARKER_END
@@ -406,6 +420,7 @@ nginx_ssl_server() {
   cert="$2"
   key="$3"
   http2_mode="${4:-listen}"
+  target="${5:-$BACKEND}"
   assert_pem_path "ssl_certificate" "$cert"
   assert_pem_path "ssl_certificate_key" "$key"
 
@@ -432,7 +447,7 @@ server {
     }
 
     location / {
-$(proxy_location)
+$(proxy_location "$target")
     }
 }
 
@@ -451,7 +466,7 @@ ${http2_line}
     proxy_connect_timeout 60;
 
     location / {
-$(proxy_location)
+$(proxy_location "$target")
     }
 }
 $MARKER_END
@@ -550,15 +565,36 @@ ensure_certbot() {
 
 write_live_file() {
   live="$1"
+  site="${2:-}"
   assert_pem_path "证书目录" "$live"
   printf '%s\n' "$live" > "$CERT_LIVE_FILE"
+  if [ -n "$site" ]; then
+    printf '%s\n' "$live" > "$STATE_DIR/cert.live.${site}"
+  fi
 }
 
 read_live_file() {
-  [ -f "$CERT_LIVE_FILE" ] || fail "没有证书目录记录 $CERT_LIVE_FILE"
-  live="$(tr -d '\r' < "$CERT_LIVE_FILE" | sed -n '/^\/[A-Za-z0-9/._+-]*$/p' | tail -n1)"
-  [ -n "$live" ] || fail "证书目录记录损坏：$CERT_LIVE_FILE"
+  site="${1:-}"
+  file="$CERT_LIVE_FILE"
+  if [ -n "$site" ] && [ -f "$STATE_DIR/cert.live.${site}" ]; then
+    file="$STATE_DIR/cert.live.${site}"
+  fi
+  [ -f "$file" ] || fail "没有证书目录记录 $file"
+  live="$(tr -d '\r' < "$file" | sed -n '/^\/[A-Za-z0-9/._+-]*$/p' | tail -n1)"
+  [ -n "$live" ] || fail "证书目录记录损坏：$file"
   printf '%s' "$live"
+}
+
+panel_address() {
+  if [ -n "${PANEL_ADDRESS:-}" ]; then
+    printf '%s' "$PANEL_ADDRESS"
+    return 0
+  fi
+  if [ -n "${DOMAIN:-}" ] && [ "$DOMAIN" != "example.com" ]; then
+    printf 'panel.%s' "$DOMAIN"
+    return 0
+  fi
+  printf ''
 }
 
 find_existing_cert_dir() {
@@ -600,12 +636,13 @@ cert_pair_from_dir() {
 issue_cert_webroot() {
   site="$1"
   email="$2"
+  soft="${3:-}"
   live="/etc/letsencrypt/live/${site}"
 
   existing="$(find_existing_cert_dir "$site")"
   if [ -n "$existing" ]; then
     log "复用已有证书目录 $existing"
-    write_live_file "$existing"
+    write_live_file "$existing" "$site"
     return 0
   fi
 
@@ -618,10 +655,22 @@ issue_cert_webroot() {
     -d "$site" \
     -m "$email" \
     --agree-tos --no-eff-email --non-interactive >&2; then
-    fail "certbot 申请失败。请确认 http://${site}/.well-known/acme-challenge/ 能打到这台机器，且 Cloudflare 为灰云"
+    msg="certbot 申请失败。请确认 http://${site}/.well-known/acme-challenge/ 能打到这台机器，且 Cloudflare 为灰云"
+    if [ "$soft" = "soft" ]; then
+      log "$msg"
+      return 1
+    fi
+    fail "$msg"
   fi
-  [ -f "$live/fullchain.pem" ] && [ -f "$live/privkey.pem" ] || fail "证书申请失败：$live 下没有 pem"
-  write_live_file "$live"
+  if [ ! -f "$live/fullchain.pem" ] || [ ! -f "$live/privkey.pem" ]; then
+    msg="证书申请失败：$live 下没有 pem"
+    if [ "$soft" = "soft" ]; then
+      log "$msg"
+      return 1
+    fi
+    fail "$msg"
+  fi
+  write_live_file "$live" "$site"
 }
 
 write_ssl_variants() {
@@ -629,11 +678,12 @@ write_ssl_variants() {
   cert="$2"
   key="$3"
   dest="$4"
+  target="${5:-$BACKEND}"
   tmp="$(mktemp)"
   ok=0
   last_err=""
   for mode in listen on off; do
-    nginx_ssl_server "$site" "$cert" "$key" "$mode" > "$tmp"
+    nginx_ssl_server "$site" "$cert" "$key" "$mode" "$target" > "$tmp"
     check="$(count_ssl_tokens "$tmp")"
     if [ "$check" != "ok" ]; then
       last_err="ssl 行校验失败：$check"
@@ -695,7 +745,7 @@ integrate_nginx() {
   rm -f "$http_tmp"
 
   issue_cert_webroot "$site" "$email"
-  live="$(read_live_file)"
+  live="$(read_live_file "$site")"
   pair="$(cert_pair_from_dir "$live" "$site")" || fail "证书目录 $live 里没有可用 pem"
   cert="${pair%%|*}"
   key="${pair#*|}"
@@ -707,23 +757,112 @@ integrate_nginx() {
   log "Nginx 已把 ${site} → http://${BACKEND}（无二次跳转）"
 }
 
-caddy_site_block() {
+wait_panel() {
+  i=0
+  while [ "$i" -lt 15 ]; do
+    if curl -fsS --connect-timeout 2 "http://${PANEL_BACKEND}/healthz" >/dev/null 2>&1; then
+      return 0
+    fi
+    i=$((i + 1))
+    sleep 1
+  done
+  return 1
+}
+
+host_resolves_here() {
+  name="$1"
+  [ -n "$name" ] || return 1
+  ip=""
+  if command -v dig >/dev/null 2>&1; then
+    ip="$(dig +short A "$name" | grep -E '^[0-9.]+$' | head -n1 || true)"
+  elif command -v nslookup >/dev/null 2>&1; then
+    ip="$(nslookup "$name" 2>/dev/null | awk '/^Address: / {print $2}' | tail -n1 || true)"
+  fi
+  [ -n "$ip" ] || return 1
+  public_ip="$(curl -4 -fsS --connect-timeout 5 --max-time 8 https://ifconfig.me 2>/dev/null || true)"
+  if [ -n "$public_ip" ] && [ "$ip" != "$public_ip" ]; then
+    return 1
+  fi
+  return 0
+}
+
+integrate_nginx_panel() {
+  load_dotenv
+  site="$(panel_address)"
+  [ -n "$site" ] || return 0
+  [ "$site" != "${SITE_ADDRESS:-}" ] || return 0
+  case "$site" in
+    *[!A-Za-z0-9.-]*|"") log "PANEL_ADDRESS 非法，跳过面板域名"; return 0 ;;
+  esac
+  if ! host_resolves_here "$site"; then
+    log "面板域名 ${site} 还没指到本机，跳过（加速站不受影响）"
+    return 0
+  fi
+  if ! wait_panel; then
+    log "本机面板 http://${PANEL_BACKEND}/healthz 不通，跳过 ${site}"
+    return 0
+  fi
+
+  dir="$(find_nginx_dir)"
+  [ -n "$dir" ] || return 0
+  dest="$dir/docker-mirror-panel.conf"
+  email="${ACME_EMAIL:-admin@example.com}"
+  mkdir -p "$ACME_WEBROOT/.well-known/acme-challenge"
+
+  log "拆掉其它站点里冲突的 server_name ${site}"
+  disarm_conflicting_servernames "$site" "$dest"
+
+  log "写入面板 Nginx HTTP 站点：$dest"
+  http_tmp="$(mktemp)"
+  nginx_http_only_server "$site" "$PANEL_BACKEND" > "$http_tmp"
+  if ! install_nginx_conf "$dest" "$http_tmp"; then
+    rm -f "$http_tmp"
+    log "面板 HTTP 站点 nginx -t 失败，跳过"
+    return 0
+  fi
+  rm -f "$http_tmp"
+
+  if ! issue_cert_webroot "$site" "$email" soft; then
+    log "面板域名证书申请失败，HTTP 站点已可用：http://${site}"
+    return 0
+  fi
+  live="$(read_live_file "$site")"
+  pair="$(cert_pair_from_dir "$live" "$site")" || {
+    log "面板证书目录不可用，保留 HTTP"
+    return 0
+  }
+  cert="${pair%%|*}"
+  key="${pair#*|}"
+  assert_pem_file "ssl_certificate" "$cert"
+  assert_pem_file "ssl_certificate_key" "$key"
+  write_ssl_variants "$site" "$cert" "$key" "$dest" "$PANEL_BACKEND"
+  log "Nginx 已把 https://${site} → http://${PANEL_BACKEND}"
+}
+
+caddy_site_inner() {
   site="$1"
+  target="${2:-$BACKEND}"
   cat <<EOF
-$MARKER_BEGIN
 ${site} {
-	reverse_proxy ${BACKEND} {
-		flush_interval -1
-		header_up X-Forwarded-Proto {scheme}
-		header_up X-Forwarded-Host {host}
-		transport http {
-			read_timeout 1h
-			write_timeout 1h
+		reverse_proxy ${target} {
+			flush_interval -1
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+			transport http {
+				read_timeout 1h
+				write_timeout 1h
+			}
 		}
 	}
-}
-$MARKER_END
 EOF
+}
+
+caddy_site_block() {
+  site="$1"
+  target="${2:-$BACKEND}"
+  printf '%s\n' "$MARKER_BEGIN"
+  caddy_site_inner "$site" "$target"
+  printf '%s\n' "$MARKER_END"
 }
 
 reload_host_caddy() {
@@ -750,7 +889,15 @@ integrate_caddy() {
   wait_backend
   cp "$file" "${file}.bak.docker-mirror.$(date +%Y%m%d%H%M%S)"
   body="$(mktemp)"
-  caddy_site_block "$site" > "$body"
+  {
+    printf '%s\n' "$MARKER_BEGIN"
+    caddy_site_inner "$site"
+    panel="$(panel_address)"
+    if [ -n "$panel" ] && [ "$panel" != "$site" ] && host_resolves_here "$panel"; then
+      caddy_site_inner "$panel" "$PANEL_BACKEND"
+    fi
+    printf '%s\n' "$MARKER_END"
+  } > "$body"
   upsert_marked_file "$file" "$body"
   rm -f "$body"
   reload_host_caddy "$file"
@@ -826,6 +973,7 @@ integrate() {
       ;;
     behind-nginx)
       integrate_nginx
+      integrate_nginx_panel || true
       verify_public
       ;;
     behind-caddy)
